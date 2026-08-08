@@ -4,6 +4,7 @@
 
 import {
   getClusters,
+  getCumulativeAreaKm2,
   getPriceGrid,
   getTargetDetail,
   getZoneStats,
@@ -65,15 +66,25 @@ export default async function Page(props: PageProps<"/">) {
 
   // ensureGoogleRetention() runs from listTargetsInBbox and getTargetDetail
   // only: dropping either from this list drops the 30-day Google purge with it.
-  const [inFrame, stats, sectors, front, grid, detail] =
-    await Promise.all([
-      listTargetsInBbox(owner, frame),
-      getZoneStats(owner, frame),
-      earlySectors ? Promise.resolve(earlySectors) : listZones(owner, 24),
-      listFront(owner, 5),
-      getPriceGrid(owner),
-      targetId ? getTargetDetail(owner, targetId) : Promise.resolve(null),
-    ]);
+  const [
+    inFrame,
+    stats,
+    sectors,
+    front,
+    grid,
+    detail,
+    cumulativeArea,
+  ] = await Promise.all([
+    listTargetsInBbox(owner, frame),
+    getZoneStats(owner, frame),
+    earlySectors ? Promise.resolve(earlySectors) : listZones(owner, 24),
+    listFront(owner, 5),
+    getPriceGrid(owner),
+    targetId ? getTargetDetail(owner, targetId) : Promise.resolve(null),
+    process.env.MOLLIE_API_KEY
+      ? getCumulativeAreaKm2(owner)
+      : Promise.resolve(null),
+  ]);
 
   // clustered in TypeScript, not SQL: the grouping depends on the expected
   // value, which is recomputed on read and exists in no column.
@@ -95,6 +106,7 @@ export default async function Page(props: PageProps<"/">) {
         stats={stats}
         standardDealCents={standardDealCents(grid)}
         detail={detail}
+        cumulativeAreaKm2={cumulativeArea}
         naf={NAF}
         defaultNaf={DEFAULT_NAF}
         fichesParPage={SIRENE_MAX_PER_PAGE}
