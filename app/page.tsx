@@ -4,7 +4,7 @@
 
 import {
   getClusters,
-  getProgression,
+  getPriceGrid,
   getTargetDetail,
   getZoneStats,
   listFront,
@@ -16,6 +16,7 @@ import { requireUser } from "@/lib/accounts";
 import { DEFAULT_FRAME, frameToText, textToFrame } from "@/components/map/frame";
 import { parseView } from "@/components/map/view";
 import { unionBbox } from "@/lib/geo";
+import { standardDealCents } from "@/lib/priceGrid";
 import {
   SIRENE_EXTRA_NAF,
   SIRENE_MAX_PER_PAGE,
@@ -71,10 +72,9 @@ export default async function Page(props: PageProps<"/">) {
     show: first(params.show),
   });
 
-  // ensureGoogleRetention() runs from listTargetsInBbox, getTargetDetail and
-  // getSeasonReport only: dropping the last of them from this list drops the
-  // 30-day Google purge with it.
-  const [inFrame, stats, sectors, front, progression, detail] =
+  // ensureGoogleRetention() runs from listTargetsInBbox and getTargetDetail
+  // only: dropping either from this list drops the 30-day Google purge with it.
+  const [inFrame, stats, sectors, front, grid, detail] =
     await Promise.all([
       listTargetsInBbox(owner, frame, {
         sort: view.sort,
@@ -86,7 +86,7 @@ export default async function Page(props: PageProps<"/">) {
       getZoneStats(owner, frame),
       earlySectors ? Promise.resolve(earlySectors) : listZones(owner, 24),
       listFront(owner, 5),
-      getProgression(owner),
+      getPriceGrid(owner),
       targetId ? getTargetDetail(owner, targetId) : Promise.resolve(null),
     ]);
 
@@ -109,7 +109,7 @@ export default async function Page(props: PageProps<"/">) {
         sectors={sectors}
         front={front}
         stats={stats}
-        progression={progression}
+        standardDealCents={standardDealCents(grid)}
         detail={detail}
         naf={NAF}
         defaultNaf={DEFAULT_NAF}

@@ -74,14 +74,6 @@ export function sameStates(
   return a.length === b.length && a.every((state) => b.includes(state));
 }
 
-export function isDefaultView(view: TargetView): boolean {
-  return (
-    view.sort === DEFAULT_VIEW.sort &&
-    view.dir === DEFAULT_VIEW.dir &&
-    sameStates(view.states, DEFAULT_VIEW.states)
-  );
-}
-
 // Only what differs from the default is written, so a plain view keeps a clean URL.
 export function writeView(params: URLSearchParams, view: TargetView): void {
   if (view.sort !== DEFAULT_VIEW.sort) params.set("sort", view.sort);
