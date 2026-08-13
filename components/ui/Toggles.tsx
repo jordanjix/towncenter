@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useT } from "@/lib/i18n/client";
+
 import { cx } from "./style";
 import { THEME_STORAGE_KEY, DEFAULT_THEME, type Theme } from "./theme";
 
@@ -18,6 +20,7 @@ function crossfadeColors(): void {
 // and announcement must all say what the click will do, or voice control loses
 // the "Label in Name" match.
 export function useTheme() {
+  const t = useT();
   // the first client render must match the server render, so start from the
   // default and read the attribute `THEME_SCRIPT` set once mounted.
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
@@ -45,13 +48,12 @@ export function useTheme() {
     theme,
     toggle,
     toLight,
-    description: toLight
-      ? "Switch to the light theme"
-      : "Switch to the dark theme",
+    description: toLight ? t("ui.theme.toLight") : t("ui.theme.toDark"),
   };
 }
 
 export function ThemeToggle({ className }: { className?: string }) {
+  const t = useT();
   const { toggle, toLight, description } = useTheme();
 
   return (
@@ -65,7 +67,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     >
       <ThemeIcon to={toLight ? "light" : "dark"} />
       <span className="t-label toggle__label">
-        {toLight ? "Light" : "Dark"}
+        {toLight ? t("ui.theme.light") : t("ui.theme.dark")}
       </span>
     </button>
   );

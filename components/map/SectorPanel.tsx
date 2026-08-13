@@ -11,6 +11,8 @@ import { initialActionState } from "@/app/actionState";
 import type { ZoneRow } from "@/app/queries";
 import { Button, Badge, ConfirmDialog, Gauge, percent, Spinner } from "@/components/ui";
 import { formatEuros } from "@/lib/format";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n/messages";
 import type { Bbox } from "@/lib/types";
 
 import { sameFrame } from "./frame";
@@ -50,10 +52,10 @@ export type SectorPanelProps = {
   onDeleted?: (sector: ZoneRow) => void;
 };
 
-function nameOf(sector: ZoneRow): string {
+function nameOf(t: Translate, sector: ZoneRow): string {
   if (sector.label && sector.label.trim() !== "") return sector.label;
   const day = shortDate(sector.startedAt);
-  return day ? `Sector of ${day}` : "Unnamed sector";
+  return day ? t("sector.of", { date: day }) : t("sector.unnamed");
 }
 
 type SectorRenameDialogProps = {
@@ -81,32 +83,38 @@ function SectorRenameDialog({
   onCancel,
   formToken,
 }: SectorRenameDialogProps) {
+  const t = useT();
+
   return (
-    <ConfirmDialog open={open} title={`Rename ${nameOf(sector)}`} onCancel={onCancel}>
+    <ConfirmDialog
+      open={open}
+      title={t("sector.rename.title", { name: nameOf(t, sector) })}
+      onCancel={onCancel}
+    >
       <form action={action} className="sheet__entry-input" key={formToken}>
         <input type="hidden" name="id" value={sector.id} />
         <label className="sheet__field">
-          <Badge>Sector name</Badge>
+          <Badge>{t("sector.rename.label")}</Badge>
           <input
             name="label"
             className="sheet__input"
             defaultValue={sector.label ?? ""}
-            placeholder="Centre-ville"
+            placeholder={t("sector.rename.placeholder")}
             maxLength={120}
             autoComplete="off"
             autoFocus
           />
           <span className="t-body-s tone-3">
-            Clearing the field erases the name: the sector goes back to its date.
+            {t("sector.rename.hint")}
           </span>
         </label>
         <div className="sheet__actions">
           <Button type="button" variant="quiet" disabled={pending} onClick={onCancel}>
-            Cancel
+            {t("sheet.cancel")}
           </Button>
           <Button type="submit" variant="primary" disabled={pending}>
             {pending && <Spinner />}
-            Rename
+            {t("sector.rename.submit")}
           </Button>
         </div>
       </form>
@@ -137,52 +145,77 @@ function SectorDeleteDialog({
   action,
   onCancel,
 }: SectorDeleteDialogProps) {
+  const t = useT();
   const otherApproached = sector.approached - sector.captures;
+  const businessWord = (n: number) =>
+    plural(n, t("sector.word.business.one"), t("sector.word.business.many"));
 
   return (
     <ConfirmDialog
       open={open}
-      title="Delete this sector?"
+      title={t("sector.delete.title")}
       onCancel={onCancel}
       className="confirm-dialog__card--danger"
     >
       <p className="t-body">
-        This erases {nameOf(sector)} itself, and every business found inside it.
+        {t("sector.delete.body", { name: nameOf(t, sector) })}
       </p>
       {sector.surveyed > 0 ? (
         <p className="t-body-s tone-2 tnum">
-          {plural(sector.surveyed, "business", "businesses")}, along with their notes,
-          stage and full history, will be gone for good.
+          {t(
+            sector.surveyed > 1
+              ? "sector.delete.surveyed.many"
+              : "sector.delete.surveyed.one",
+            { count: businessWord(sector.surveyed) },
+          )}
         </p>
       ) : (
-        <p className="t-body-s tone-2">There are no businesses recorded here yet.</p>
+        <p className="t-body-s tone-2">{t("sector.delete.none")}</p>
       )}
       {sector.captures > 0 ? (
         <p className="t-body-s tone-2 tnum">
-          Among them, {plural(sector.captures, "business", "businesses")} marked taken
-          here
-          {sector.capturedLootCents > 0
-            ? `, worth ${formatEuros(sector.capturedLootCents, { decimals: "never" })}`
-            : ""}
-          .
+          {t(
+            sector.captures > 1
+              ? "sector.delete.captures.many"
+              : "sector.delete.captures.one",
+            {
+              count: businessWord(sector.captures),
+              worth:
+                sector.capturedLootCents > 0
+                  ? t("sector.delete.worth", {
+                      amount: formatEuros(sector.capturedLootCents, { decimals: "never" }),
+                    })
+                  : "",
+            },
+          )}
         </p>
       ) : null}
       {otherApproached > 0 ? (
         <p className="t-body-s tone-2 tnum">
-          {plural(otherApproached, "other business", "other businesses")} already
-          approached will go with it.
+          {t(
+            otherApproached > 1
+              ? "sector.delete.approached.many"
+              : "sector.delete.approached.one",
+            {
+              count: plural(
+                otherApproached,
+                t("sector.word.otherBusiness.one"),
+                t("sector.word.otherBusiness.many"),
+              ),
+            },
+          )}
         </p>
       ) : null}
-      <p className="t-body-s tone-3">This cannot be undone.</p>
+      <p className="t-body-s tone-3">{t("sector.delete.warning")}</p>
 
       <form action={action} className="sheet__actions">
         <input type="hidden" name="id" value={sector.id} />
         <Button type="button" variant="quiet" disabled={pending} onClick={onCancel}>
-          Keep
+          {t("sector.delete.keep")}
         </Button>
         <Button type="submit" variant="danger" disabled={pending}>
           {pending && <Spinner />}
-          Delete permanently
+          {t("sector.delete.submit")}
         </Button>
       </form>
     </ConfirmDialog>
@@ -198,6 +231,7 @@ export function SectorPanel({
   inProgress,
   onDeleted,
 }: SectorPanelProps) {
+  const t = useT();
   const [ruleLifted, setRuleLifted] = useState(false);
   /** The id of the sector being renamed. One at a time. */
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -263,51 +297,53 @@ export function SectorPanel({
   return (
     <div className="sectors">
       <div className="sectors__head">
-        <Badge asChild><h2>Sectors</h2></Badge>
+        <Badge asChild><h2>{t("sector.title")}</h2></Badge>
         <Button
           variant={drawMode ? "primary" : "secondary"}
           size="compact"
           onClick={onDraw}
           aria-pressed={drawMode}
         >
-          {drawMode ? "Drawing armed" : "Draw"}
+          {drawMode ? t("sector.draw.armed") : t("sector.draw")}
         </Button>
       </div>
 
       {current && !ruleMet && !ruleLifted ? (
         <div className="sectors__discipline">
-          <Badge asChild><p>Discipline</p></Badge>
+          <Badge asChild><p>{t("sector.discipline")}</p></Badge>
           <p className="t-body-s">
-            You set yourself a rule: finish one sector before opening another.
+            {t("sector.rule.body")}
           </p>
           <p className="t-body-s tnum">
-            {nameOf(current)} — {current.approached} / {current.surveyed} approached,
-            that is {percent((approachedShare ?? 0) * 100)}. Target{" "}
-            {percent(DISCIPLINE_THRESHOLD * 100)}.
+            {t("sector.rule.progress", {
+              name: nameOf(t, current),
+              approached: current.approached,
+              surveyed: current.surveyed,
+              percent: percent((approachedShare ?? 0) * 100),
+              target: percent(DISCIPLINE_THRESHOLD * 100),
+            })}
           </p>
           <Gauge
             value={(approachedShare ?? 0) / DISCIPLINE_THRESHOLD}
             tint="var(--text-1)"
             thickness="fine"
-            label="Progress toward the rule"
+            label={t("sector.rule.gauge")}
           />
           <Button variant="quiet" size="compact" onClick={() => setRuleLifted(true)}>
-            Lift the rule
+            {t("sector.rule.lift")}
           </Button>
         </div>
       ) : null}
 
       {ruleLifted ? (
         <p className="t-body-s tone-3 sectors__cheat">
-          Rule lifted for this session. It is a deliberate cheat, and it is written
-          here.
+          {t("sector.rule.lifted")}
         </p>
       ) : null}
 
       {sectors.length === 0 && !inProgress ? (
         <p className="t-body-s tone-2 sectors__empty">
-          No sector surveyed yet. Draw a rectangle on the map: it fills with every
-          real business inside it.
+          {t("sector.empty")}
         </p>
       ) : (
         <ul className="sectors__list">
@@ -315,7 +351,7 @@ export function SectorPanel({
             <li>
               <div className="sector sector--ghost" aria-busy="true">
                 <span className="t-title-3 sector__ghost-name">{inProgress.name}</span>
-                <span className="t-micro sector__running">Survey running</span>
+                <span className="t-micro sector__running">{t("sector.running")}</span>
 
                 {/* Skeleton bars instead of the figures we do not have yet.
                     They promise nothing: the real count appears below as soon
@@ -325,12 +361,24 @@ export function SectorPanel({
 
                 <span className="t-body-s sector__figures tnum">
                   {inProgress.page === null
-                    ? "Opening the sector…"
-                    : `Page ${inProgress.page}${
-                        inProgress.estimatedPages ? ` of ~${inProgress.estimatedPages}` : ""
-                      } · ${plural(inProgress.read, "business read", "businesses read")} · ${
-                        inProgress.created
-                      } new`}
+                    ? t("sector.opening")
+                    : `${
+                        inProgress.estimatedPages
+                          ? t("sector.progress.pageOf", {
+                              page: inProgress.page,
+                              total: inProgress.estimatedPages,
+                            })
+                          : t("sector.progress.page", { page: inProgress.page })
+                      } · ${plural(
+                        inProgress.read,
+                        t("sector.progress.read.one"),
+                        t("sector.progress.read.many"),
+                      )} · ${t(
+                        inProgress.created > 1
+                          ? "sector.progress.new.many"
+                          : "sector.progress.new.one",
+                        { n: inProgress.created },
+                      )}`}
                 </span>
               </div>
             </li>
@@ -358,32 +406,46 @@ export function SectorPanel({
                     aria-current={here ? "true" : undefined}
                     onClick={() => onGoTo(sector.bbox, sector)}
                   >
-                    {nameOf(sector)}
+                    {nameOf(t, sector)}
                   </button>
 
                   {sector.status === "failed" ? (
-                    <span className="t-micro sector__failure">Survey interrupted</span>
+                    <span className="t-micro sector__failure">{t("sector.interrupted")}</span>
                   ) : null}
                   {sector.status === "running" ? (
-                    <span className="t-micro sector__running">Survey running</span>
+                    <span className="t-micro sector__running">{t("sector.running")}</span>
                   ) : null}
 
                   <Gauge
                     value={sector.hold}
                     segments={5}
                     tint="var(--text-1)"
-                    label={`Hold on ${nameOf(sector)}`}
+                    label={t("sector.hold.gauge", { name: nameOf(t, sector) })}
                   />
 
                   <span className="t-body-s sector__figures tnum">
                     {hasBeenSurveyed
-                      ? `Hold ${percent(sector.hold * 100)} · ${plural(sector.surveyed, "surveyed", "surveyed")} · ${plural(sector.captures, "taken", "taken")}`
-                      : "Not surveyed yet"}
+                      ? t("sector.figures", {
+                          hold: percent(sector.hold * 100),
+                          surveyed: plural(
+                            sector.surveyed,
+                            t("sector.word.surveyed.one"),
+                            t("sector.word.surveyed.many"),
+                          ),
+                          taken: plural(
+                            sector.captures,
+                            t("sector.word.taken.one"),
+                            t("sector.word.taken.many"),
+                          ),
+                        })
+                      : t("sector.notSurveyed")}
                   </span>
 
                   {sector.capturedLootCents > 0 ? (
                     <span className="t-body-s sector__captured tnum">
-                      {formatEuros(sector.capturedLootCents, { decimals: "never" })} taken here
+                      {t("sector.takenHere", {
+                        amount: formatEuros(sector.capturedLootCents, { decimals: "never" }),
+                      })}
                     </span>
                   ) : null}
 
@@ -397,7 +459,7 @@ export function SectorPanel({
                       size="compact"
                       onClick={() => setRenaming(sector.id)}
                     >
-                      Rename
+                      {t("sector.rename.submit")}
                     </Button>
                     <Button
                       variant="quiet"
@@ -405,7 +467,7 @@ export function SectorPanel({
                       className="button--quiet-danger"
                       onClick={() => setConfirmDeleteSector(sector)}
                     >
-                      Delete
+                      {t("sector.delete.button")}
                     </Button>
                   </div>
 

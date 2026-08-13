@@ -1,3 +1,4 @@
+import { useT } from "@/lib/i18n/client";
 import { CALIBRATION_MIN_OUTCOMES } from "@/lib/types";
 
 import { Gauge } from "./Gauge";
@@ -82,13 +83,17 @@ export function Difficulty({
   withoutQualifier = false,
   className,
 }: DifficultyProps) {
+  const t = useT();
   const ratio = Number.isFinite(resistance) ? Math.min(1, Math.max(0, resistance)) : 0;
   const resistancePct = roundTo5(ratio * 100);
   const band = resistanceBand(resistancePct);
+  // `band.label` stays English data; the visible qualifier translates by key.
+  const bandLabel = t(`ui.band.${band.key}`);
 
   // Both wordings derive from the SAME rounding, so they stay complementary.
   const displayedPct = wording === "odds" ? 100 - resistancePct : resistancePct;
-  const metricName = wording === "odds" ? "Odds" : "Resistance";
+  const metricName =
+    wording === "odds" ? t("ui.difficulty.odds") : t("ui.difficulty.resistance");
 
   const calibrated = issues >= CALIBRATION_MIN_OUTCOMES;
 
@@ -101,12 +106,15 @@ export function Difficulty({
     <>
       {facts ? (
         <p className="t-body-s difficulty__caption">
-          Computed from {facts.available} of {facts.total} facts
+          {t("ui.difficulty.computedFrom", {
+            available: facts.available,
+            total: facts.total,
+          })}
         </p>
       ) : null}
       {calibrated ? null : (
         <p className="t-body-s difficulty__caption">
-          Estimate not calibrated (n = {issues})
+          {t("ui.difficulty.notCalibrated", { n: issues })}
         </p>
       )}
     </>
@@ -143,7 +151,7 @@ export function Difficulty({
             <span className="t-display tnum difficulty__value">{percent(displayedPct)}</span>
             <span className="t-label tone-2">{metricName}</span>
             {withoutQualifier ? null : (
-              <span className="t-body difficulty__qualifier">{band.label}</span>
+              <span className="t-body difficulty__qualifier">{bandLabel}</span>
             )}
           </div>
         </div>
@@ -160,7 +168,7 @@ export function Difficulty({
           <span className="sr-only"> {metricName.toLowerCase()}</span>
         </span>
         {withoutQualifier ? null : (
-          <span className="t-body-s difficulty__qualifier">{band.label}</span>
+          <span className="t-body-s difficulty__qualifier">{bandLabel}</span>
         )}
       </div>
       {/* No `name` or `valueText`: they are already in the header above, and
@@ -169,7 +177,10 @@ export function Difficulty({
         value={ratio}
         tint="var(--resistance-tint)"
         thickness="epaisse"
-        label={`Resistance: ${percent(resistancePct)}, ${band.label}`}
+        label={t("ui.difficulty.gaugeLabel", {
+          value: percent(resistancePct),
+          band: bandLabel,
+        })}
       />
       {captions}
     </div>

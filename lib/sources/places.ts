@@ -6,6 +6,11 @@
 
 import { distanceMeters, nameSimilarity } from "@/lib/geo";
 import {
+  translate,
+  type MessageKey,
+  type Translate,
+} from "@/lib/i18n/messages";
+import {
   GOOGLE_FRESHNESS_DAYS,
   type GooglePlaceFacts,
   type GooglePlaceMatch,
@@ -44,13 +49,15 @@ const MIN_NAME_SCORE = 0.78;
 
 const MIN_CONFIDENCE = 0.62;
 
+// `message` stays English for the logs; boundaries translate `key` + `params`.
 export class PlacesError extends Error {
   constructor(
-    message: string,
+    readonly key: MessageKey,
     /** `PERMISSION_DENIED` and `INVALID_ARGUMENT` never heal on their own. */
     readonly retryable: boolean,
+    readonly params?: Record<string, string | number>,
   ) {
-    super(message);
+    super(translate("en", key, params));
     this.name = "PlacesError";
   }
 }
@@ -211,7 +218,7 @@ export async function findPlaceFor(
   }
 
   if (!payload) {
-    throw last ?? new PlacesError("Google did not answer.", true);
+    throw last ?? new PlacesError("lib.places.noAnswer", true);
   }
 
   return pickBestMatch(payload.places ?? [], input, options.minConfidence);
@@ -315,9 +322,9 @@ async function searchTextOnce(
     });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new PlacesError("Google took too long to answer.", true);
+      throw new PlacesError("lib.places.timeout", true);
     }
-    throw new PlacesError("Could not reach Google Places.", true);
+    throw new PlacesError("lib.places.unreachable", true);
   } finally {
     clearTimeout(timeout);
   }
@@ -347,41 +354,31 @@ function errorFor(status: number, detail: string): PlacesError {
   }
 
   if (status === 401) {
-    return new PlacesError(
-      "Google Places rejected the API key. Check GOOGLE_PLACES_API_KEY.",
-      false,
-    );
+    return new PlacesError("lib.places.keyRejected", false);
   }
   if (status === 403) {
-    return new PlacesError(
-      "Google Places refused the key: API disabled, billing missing, or usage restriction.",
-      false,
-    );
+    return new PlacesError("lib.places.keyRefused", false);
   }
   if (status === 400) {
-    return new PlacesError(
-      "Google Places rejected the request (invalid parameter or FieldMask).",
-      false,
-    );
+    return new PlacesError("lib.places.badRequest", false);
   }
   if (status === 404) {
-    return new PlacesError("This place no longer exists on Google.", false);
+    return new PlacesError("lib.places.gone", false);
   }
   if (status === 429 || googleStatus === "RESOURCE_EXHAUSTED") {
-    return new PlacesError(
-      "Google Places quota exceeded. Try again later.",
-      true,
-    );
+    return new PlacesError("lib.places.quota", true);
   }
   return new PlacesError(
-    `Google Places answered ${status}.`,
+    "lib.places.status",
     status >= 500 || googleStatus === "UNAVAILABLE" || googleStatus === "INTERNAL",
+    { status },
   );
 }
 
 // one billed request, the cheapest honest proof that a key works before it is saved
 export async function checkPlacesKey(
   key: string,
+  t: Translate,
 ): Promise<{ ok: true; message: null } | { ok: false; message: string }> {
   try {
     await searchTextOnce(
@@ -392,7 +389,9 @@ export async function checkPlacesKey(
     );
     return { ok: true, message: null };
   } catch (error) {
-    if (error instanceof PlacesError) return { ok: false, message: error.message };
-    return { ok: false, message: "Google did not answer." };
+    if (error instanceof PlacesError) {
+      return { ok: false, message: t(error.key, error.params) };
+    }
+    return { ok: false, message: t("lib.places.noAnswer") };
   }
 }

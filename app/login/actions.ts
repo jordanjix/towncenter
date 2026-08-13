@@ -17,29 +17,37 @@ import {
   normalizeEmail,
   verifyCredentials,
 } from "@/lib/accounts";
+import { actions as actionsDict } from "@/lib/i18n/dicts/actions";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey, Translate } from "@/lib/i18n/messages";
 import { PASSWORD_MAX, checkPasswordShape } from "@/lib/password";
 
 // a "use server" module may export only async functions, so the state types
 // live next door in state.ts
 import type { SignInState, SignupFormState } from "./state";
 
+// zod schemas are module constants, so their custom messages are dictionary keys
+function localize(t: Translate, message: string): string {
+  return message in actionsDict.en ? t(message as MessageKey) : message;
+}
+
 const signInSchema = z.object({
-  email: z.string().min(1, "Enter your email address.").max(320),
-  password: z.string().min(1, "Enter your password.").max(PASSWORD_MAX),
+  email: z.string().min(1, "actions.login.emailRequired").max(320),
+  password: z.string().min(1, "actions.login.passwordRequired").max(PASSWORD_MAX),
   next: z.string().max(2048).optional(),
 });
 
 const signUpSchema = z.object({
   email: z
     .string()
-    .min(1, "Enter your email address.")
+    .min(1, "actions.login.emailRequired")
     .max(320)
     // rejects the empty string and the obvious shapes; it does not try to
     // validate an address for real, the only test that counts is that mail lands
     .refine((value) => z.string().email().safeParse(value.trim()).success, {
-      message: "That is not a readable email address.",
+      message: "actions.signup.emailInvalid",
     }),
-  password: z.string().min(1, "Choose a password.").max(PASSWORD_MAX),
+  password: z.string().min(1, "actions.signup.passwordRequired").max(PASSWORD_MAX),
   displayName: z.string().max(120).optional(),
 });
 
@@ -88,6 +96,7 @@ export async function signInAction(
   _previous: SignInState,
   formData: FormData,
 ): Promise<SignInState> {
+  const t = await getT();
   const email = field(formData, "email");
 
   const parsed = signInSchema.safeParse({
@@ -97,8 +106,9 @@ export async function signInAction(
   });
 
   if (!parsed.success) {
+    const issue = parsed.error.issues[0]?.message;
     return {
-      error: parsed.error.issues[0]?.message ?? "Entry refused.",
+      error: issue ? localize(t, issue) : t("actions.error.entryRefused"),
       email,
     };
   }
@@ -106,10 +116,7 @@ export async function signInAction(
   // rate limited PER ADDRESS: a global counter would shut the gate on everyone
   // after ten deliberate failures on an invented address
   if (!loginAttemptAllowed(parsed.data.email)) {
-    return {
-      error: "Too many attempts on this address. Try again in fifteen minutes.",
-      email,
-    };
+    return { error: t("actions.login.tooManyAttempts"), email };
   }
 
   let account;
@@ -120,7 +127,7 @@ export async function signInAction(
     // user's. Said without revealing what is missing, and logged, because
     // otherwise nobody will ever know why.
     console.error("[signin]", error);
-    return { error: "The door is not configured on this server.", email };
+    return { error: t("actions.login.notConfigured"), email };
   }
 
   if (!account) {
@@ -129,7 +136,7 @@ export async function signInAction(
     // apart turns the form into an oracle for who uses this instance;
     // verifyCredentials also spends the same time in both cases, otherwise the
     // response latency would say what the message does not.
-    return { error: "Wrong email or password.", email };
+    return { error: t("actions.login.wrongCredentials"), email };
   }
 
   registerLoginSuccess(parsed.data.email);
@@ -141,6 +148,7 @@ export async function signUpAction(
   _previous: SignupFormState,
   formData: FormData,
 ): Promise<SignupFormState> {
+  const t = await getT();
   const email = field(formData, "email");
   const displayName = field(formData, "displayName");
   const base = { email, displayName, error: null, fields: {} };
@@ -155,7 +163,7 @@ export async function signUpAction(
     const fields: Record<string, string> = {};
     for (const issue of parsed.error.issues) {
       const key = String(issue.path[0] ?? "_");
-      if (!(key in fields)) fields[key] = issue.message;
+      if (!(key in fields)) fields[key] = localize(t, issue.message);
     }
     return { ...base, fields };
   }
@@ -173,6 +181,7 @@ export async function signUpAction(
   const refusal = checkPasswordShape(
     parsed.data.password,
     normalizeEmail(parsed.data.email),
+    t,
   );
   if (refusal) {
     return { ...base, fields: { password: refusal.message } };
@@ -187,7 +196,7 @@ export async function signUpAction(
     });
   } catch (error) {
     console.error("[signup]", error);
-    return { ...base, error: "Account not created. Try again." };
+    return { ...base, error: t("actions.signup.failed") };
   }
 
   if (!result.ok) {

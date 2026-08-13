@@ -1,3 +1,5 @@
+import { useT } from "@/lib/i18n/client";
+
 import { Badge } from "./badge";
 import { Gauge } from "./Gauge";
 import { percent } from "./percent";
@@ -28,6 +30,7 @@ export function Hold({
   floating = false,
   className,
 }: HoldProps) {
+  const t = useT();
   const hasSurvey = surveyed > 0;
   const ratio = hasSurvey ? Math.min(1, captures / surveyed) : 0;
   // `rate`, not `percent`: the latter is the imported formatter.
@@ -37,14 +40,14 @@ export function Hold({
     // `glass` and not an opaque surface: a floating hold sits ON the map, over
     // something that moves.
     <div className={cx("hold", "glass", floating && "hold--floating", className)}>
-      <Badge>Hold</Badge>
+      <Badge>{t("ui.hold.badge")}</Badge>
 
       <span className="hold__rate tnum">
         {hasSurvey ? percent(rate) : "—"}
         <span className="sr-only">
           {hasSurvey
-            ? ` hold on ${sector}`
-            : `, sector ${sector} not surveyed yet`}
+            ? t("ui.hold.srHold", { sector })
+            : t("ui.hold.srNotSurveyed", { sector })}
         </span>
       </span>
 
@@ -52,13 +55,13 @@ export function Hold({
         value={ratio}
         segments={5}
         tint="var(--text-1)"
-        label={`Hold on ${sector}`}
+        label={t("ui.hold.gaugeLabel", { sector })}
       />
 
       <span className="t-body-s hold__detail tnum">
         {hasSurvey
-          ? `${captures} taken of ${surveyed} surveyed`
-          : "Sector not surveyed yet"}
+          ? t("ui.hold.detail", { captures, surveyed })
+          : t("ui.hold.notSurveyed")}
       </span>
       <span className="t-body-s hold__detail">{sector}</span>
     </div>

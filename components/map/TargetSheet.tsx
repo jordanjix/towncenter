@@ -13,6 +13,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useActionState,
@@ -46,6 +47,7 @@ import {
   type SourceKey,
 } from "@/components/ui";
 import { formatEuros } from "@/lib/format";
+import { useT } from "@/lib/i18n/client";
 import { PRICE_OFFER_LABELS } from "@/lib/scoring";
 import { TARGET_STATE_RANK, type TargetState } from "@/lib/types";
 
@@ -59,12 +61,12 @@ import {
 import { fiveFacts, recordedFacts } from "./facts";
 import { sheetAsMarkdown } from "./prompt";
 import {
-  APPROACH,
+  approach,
   STEP_EVENT,
-  STATE_LABEL,
-  EVENT_LABEL,
-  ADVANCE_VERB,
-  STEP_VERB,
+  stateLabel,
+  eventLabel,
+  advanceVerb,
+  stepVerb,
   distance,
   shortDate,
   formatNumber,
@@ -82,12 +84,6 @@ export type TargetSheetProps = {
 /** ASCII keys: they drive `data-tab` attributes. */
 type Tab = "approach" | "facts" | "log";
 
-const TABS: readonly { key: Tab; label: string }[] = [
-  { key: "approach", label: "Approach" },
-  { key: "facts", label: "Facts" },
-  { key: "log", label: "Log" },
-];
-
 /** Steps reachable from a given state. `withdrawn` stays available regardless. */
 function nextStepsFor(state: TargetState): ("studied" | "engaged" | "taken")[] {
   const rank = TARGET_STATE_RANK[state];
@@ -103,6 +99,19 @@ export function TargetSheet({
   onSelect,
 }: TargetSheetProps) {
   const { target: target, log, neighbours } = detail;
+
+  const t = useT();
+  const stateText = useMemo(() => stateLabel(t), [t]);
+  const eventText = useMemo(() => eventLabel(t), [t]);
+  const advanceText = useMemo(() => advanceVerb(t), [t]);
+  const stepText = useMemo(() => stepVerb(t), [t]);
+  const steps = useMemo(() => approach(t), [t]);
+
+  const tabs: readonly { key: Tab; label: string }[] = [
+    { key: "approach", label: t("sheet.tab.approach") },
+    { key: "facts", label: t("sheet.tab.facts") },
+    { key: "log", label: t("sheet.tab.log") },
+  ];
 
   const [advanceState, advance, advancePending] = useActionState(
     advanceTargetAction,
@@ -216,10 +225,13 @@ export function TargetSheet({
   const success = target.score.success;
   const offGrid = price.kind === "off-grid";
   const band = resistanceBand(target.resistancePercent);
-  const facts = fiveFacts(target);
+  const facts = useMemo(() => fiveFacts(t, target), [t, target]);
   const available = recordedFacts(facts);
 
-  const groups = fieldInventory(target, log.length);
+  const groups = useMemo(
+    () => fieldInventory(t, target, log.length),
+    [t, target, log.length],
+  );
   const counting = countFields(groups);
   const main = primaryFields(groups);
 
@@ -354,7 +366,7 @@ export function TargetSheet({
   };
 
   const copyAsPrompt = async () => {
-    const text = sheetAsMarkdown(detail, outcomeCount);
+    const text = sheetAsMarkdown(t, detail, outcomeCount);
     try {
       // `navigator.clipboard` only exists in a secure context. Over plain HTTP
       // on a LAN address the property is absent entirely, so it has to be
@@ -375,7 +387,7 @@ export function TargetSheet({
       <input type="hidden" name="id" value={target.id} />
       <Button type="submit" variant="quiet" size="compact" disabled={inProgress}>
         {enrichPending && <Spinner />}
-        {target.enriched ? "Refresh the facts" : "Fetch the facts"}
+        {target.enriched ? t("sheet.facts.refresh") : t("sheet.facts.fetch")}
       </Button>
     </form>
   );
@@ -444,7 +456,9 @@ export function TargetSheet({
               }}
               inputMode={action.field === "phone" ? "tel" : "url"}
               placeholder={
-                action.field === "website" ? "boulangerie-durand.fr" : "01 99 00 00 00"
+                action.field === "website"
+                  ? t("sheet.field.websitePlaceholder")
+                  : t("sheet.field.phonePlaceholder")
               }
               defaultValue={
                 (action.field === "website"
@@ -454,10 +468,10 @@ export function TargetSheet({
             />
             <Button type="submit" variant="secondary" size="compact" disabled={inProgress}>
               {notePending && <Spinner />}
-              Save
+              {t("sheet.field.save")}
             </Button>
             <Button variant="quiet" size="compact" onClick={() => setEditing(null)}>
-              Cancel
+              {t("sheet.cancel")}
             </Button>
           </form>
         ) : (
@@ -473,7 +487,7 @@ export function TargetSheet({
       case "resurvey":
         return (
           <span className="t-body-s field__reason">
-            Nothing recorded. Only a re-survey of the sector could bring it in.
+            {t("sheet.field.resurvey")}
           </span>
         );
 
@@ -485,7 +499,7 @@ export function TargetSheet({
   const upcoming = nextStepsFor(target.state)[0] ?? null;
 
   return (
-    <aside className="sheet" aria-label={`Record for ${target.name}`}>
+    <aside className="sheet" aria-label={t("sheet.aria.record", { name: target.name })}>
       <header className="sheet__head">
         <div className="sheet__head-top">
           <p className="t-body-s tone-2">{target.lootReason}</p>
@@ -494,7 +508,7 @@ export function TargetSheet({
             size="compact"
             className="sheet__close"
             onClick={onClose}
-            aria-label="Close the record"
+            aria-label={t("sheet.aria.close")}
           >
             ✕
           </Button>
@@ -506,7 +520,7 @@ export function TargetSheet({
         </h2>
         <p className="t-body-s tone-2 sheet__address">
           {[target.address, target.postalCode, target.city].filter(Boolean).join(" · ") ||
-            "Address unknown"}
+            t("sheet.addressUnknown")}
           <Source sourceKey="sirene" />
         </p>
 
@@ -520,7 +534,7 @@ export function TargetSheet({
               // "+" would read as 3 080 + 12 x 90 = 4 160 EUR.
               recurringIncluded
               size="title"
-              label="Spoils over 12 months"
+              label={t("sheet.loot.label")}
               offGrid={offGrid}
               reason={offGrid ? price.reason : null}
             />
@@ -529,9 +543,10 @@ export function TargetSheet({
                 the two read as a contradiction. */}
             {offGrid ? null : (
               <p className="t-body-s tone-2 sheet__breakdown">
-                {formatEuros(price.priceCents, { decimals: "never" })} on signature,
-                then {formatEuros(price.recurringCents, { decimals: "never" })} a month
-                for twelve months.
+                {t("sheet.head.breakdown", {
+                  price: formatEuros(price.priceCents, { decimals: "never" }),
+                  recurring: formatEuros(price.recurringCents, { decimals: "never" }),
+                })}
                 <Source sourceKey="computed" />
               </p>
             )}
@@ -553,7 +568,7 @@ export function TargetSheet({
               wording="resistance"
             />
             <span className="t-body-s sheet__to-calculation-prompt">
-              How this figure is built ›
+              {t("sheet.head.toCalculation")}
             </span>
           </button>
         </div>
@@ -564,7 +579,7 @@ export function TargetSheet({
           <form action={restore} className="sheet__action">
             <input type="hidden" name="id" value={target.id} />
             <Button type="submit" variant="primary" disabled={inProgress}>
-              Put back in play
+              {t("sheet.head.restore")}
             </Button>
           </form>
         ) : upcoming ? (
@@ -574,14 +589,14 @@ export function TargetSheet({
               disabled={inProgress}
               onClick={() => cross(upcoming)}
             >
-              {ADVANCE_VERB[upcoming]}
+              {advanceText[upcoming]}
             </Button>
           </div>
         ) : null}
       </header>
 
-      <div className="sheet__tabs" role="tablist" aria-label="Record sections">
-        {TABS.map((item) => (
+      <div className="sheet__tabs" role="tablist" aria-label={t("sheet.aria.sections")}>
+        {tabs.map((item) => (
           <button
             key={item.key}
             type="button"
@@ -615,9 +630,8 @@ export function TargetSheet({
           >
             {offGrid ? (
               <p className="sheet__alert t-body">
-                <strong>Off-grid.</strong> {price.reason}
-                {" These are not zero-euro targets: they are the ones where the work goes "}
-                beyond the default offer. They are priced by hand, after a visit.
+                <strong>{t("sheet.offgrid.title")}</strong> {price.reason}{" "}
+                {t("sheet.offgrid.body")}
                 <Source sourceKey="computed" />
               </p>
             ) : null}
@@ -628,7 +642,7 @@ export function TargetSheet({
                   verb, a PAST step carries its date, the CURRENT step carries
                   its date and its undo. */}
               <ol className="sheet__steps" data-state={target.state}>
-                {APPROACH.map((step) => {
+                {steps.map((step) => {
                   const rank = TARGET_STATE_RANK[step.state];
                   const currentRank = TARGET_STATE_RANK[target.state];
                   // `withdrawn` and `dismissed` are -1 and -2, so no step is
@@ -663,9 +677,11 @@ export function TargetSheet({
                       <span className="t-micro tnum sheet__step-right">
                         {position === "future"
                           ? workday
-                            ? STEP_VERB[step.state as "studied" | "engaged" | "taken"]
+                            ? stepText[step.state as "studied" | "engaged" | "taken"]
                             : ""
-                          : [day, undoable ? "undo" : null].filter(Boolean).join(" · ")}
+                          : [day, undoable ? t("sheet.step.undo") : null]
+                              .filter(Boolean)
+                              .join(" · ")}
                       </span>
                     </>
                   );
@@ -683,7 +699,7 @@ export function TargetSheet({
                         >
                           {content}
                           <span className="sr-only">
-                            {` — ${ADVANCE_VERB[step.state as "studied" | "engaged" | "taken"]}`}
+                            {` — ${advanceText[step.state as "studied" | "engaged" | "taken"]}`}
                           </span>
                         </button>
                       ) : undoable ? (
@@ -695,7 +711,7 @@ export function TargetSheet({
                           onClick={() => setConfirmUndo((open) => !open)}
                         >
                           {content}
-                          <span className="sr-only"> — undo this fact</span>
+                          <span className="sr-only">{` — ${t("sheet.step.undoFact")}`}</span>
                         </button>
                       ) : (
                         <span className="sheet__step">{content}</span>
@@ -707,18 +723,19 @@ export function TargetSheet({
 
               {target.state === "withdrawn" ? (
                 <p className="t-body-s sheet__fold">
-                  Withdrawn. The spoils are out of play. Only a signature puts it back.
+                  {t("sheet.state.withdrawn")}
                 </p>
               ) : null}
               {target.state === "dismissed" ? (
                 <p className="t-body-s tone-2">
-                  Set aside: out of play, never deleted. The log stays intact.
+                  {t("sheet.state.dismissed")}
                 </p>
               ) : null}
               {target.state === "taken" ? (
                 <p className="t-body-s tone-success">
-                  Taken{target.capturedAt ? ` on ${shortDate(target.capturedAt)}` : ""}. It
-                  becomes a reference for the whole street.
+                  {target.capturedAt
+                    ? t("sheet.state.takenOn", { date: shortDate(target.capturedAt) ?? "?" })
+                    : t("sheet.state.taken")}
                 </p>
               ) : null}
 
@@ -727,7 +744,7 @@ export function TargetSheet({
                   figure in two places. */}
               {offGrid ? null : (
                 <p className="t-body-s tone-2">
-                  Offer retained: {PRICE_OFFER_LABELS[price.offer]}.
+                  {t("sheet.offer", { label: PRICE_OFFER_LABELS[price.offer] })}
                   <Source sourceKey="computed" />
                 </p>
               )}
@@ -739,7 +756,7 @@ export function TargetSheet({
                       row: on the button row nothing at rest told which of the
                       three words was clickable. */}
                   <div className="sheet__exits">
-                    <Badge>Exits</Badge>
+                    <Badge>{t("sheet.exits")}</Badge>
                     <div className="sheet__exit-actions">
                       {target.state === "withdrawn" ? null : (
                         <Button
@@ -752,7 +769,7 @@ export function TargetSheet({
                             setInput(input === "withdrawn" ? null : "withdrawn");
                           }}
                         >
-                          {ADVANCE_VERB.withdrawn}
+                          {advanceText.withdrawn}
                         </Button>
                       )}
 
@@ -764,7 +781,7 @@ export function TargetSheet({
                           size="compact"
                           disabled={inProgress}
                         >
-                          Set aside
+                          {t("sheet.setAside")}
                         </Button>
                       </form>
                     </div>
@@ -772,14 +789,17 @@ export function TargetSheet({
 
                   <ConfirmDialog
                     open={confirmUndo && lastEvent !== null}
-                    title="Undo the last fact?"
+                    title={t("sheet.undo.title")}
                     onCancel={() => setConfirmUndo(false)}
                     className="confirm-dialog__card--danger"
                   >
                     {lastEvent ? (
                       <>
                         <p className="t-body tnum">
-                          {`${EVENT_LABEL[lastEvent.kind]} on ${shortDate(lastEvent.occurredAt) ?? "?"}`}
+                          {t("sheet.undo.line", {
+                            event: eventText[lastEvent.kind],
+                            date: shortDate(lastEvent.occurredAt) ?? "?",
+                          })}
                           {lastEvent.valueCents !== null
                             ? ` · ${formatEuros(lastEvent.valueCents, { decimals: "never" })}`
                             : ""}
@@ -787,7 +807,7 @@ export function TargetSheet({
                         {lastEvent.note ? (
                           <p className="t-body-s tone-2">{lastEvent.note}</p>
                         ) : null}
-                        <p className="t-body-s tone-3">This action cannot be undone.</p>
+                        <p className="t-body-s tone-3">{t("sheet.undo.warning")}</p>
                         <form action={undo} className="sheet__actions">
                           <input type="hidden" name="id" value={target.id} />
                           <Button
@@ -796,11 +816,11 @@ export function TargetSheet({
                             disabled={inProgress}
                             onClick={() => setConfirmUndo(false)}
                           >
-                            Keep
+                            {t("sheet.undo.keep")}
                           </Button>
                           <Button type="submit" variant="danger" disabled={inProgress}>
                             {undoPending && <Spinner />}
-                            Erase this fact
+                            {t("sheet.undo.erase")}
                           </Button>
                         </form>
                       </>
@@ -809,14 +829,14 @@ export function TargetSheet({
 
                   <ConfirmDialog
                     open={input === "taken"}
-                    title="Record the take?"
+                    title={t("sheet.take.title")}
                     onCancel={() => setInput(null)}
                   >
                     <form action={advance} className="sheet__entry-input">
                       <input type="hidden" name="id" value={target.id} />
                       <input type="hidden" name="to" value="taken" />
                       <label className="sheet__field">
-                        <Badge>Amount actually signed</Badge>
+                        <Badge>{t("sheet.take.amountLabel")}</Badge>
                         {/* The field starts EMPTY: the spoils are what is in
                             play, the take is what was banked. Prefilling with
                             the estimate would report revenue nobody signed. */}
@@ -824,7 +844,7 @@ export function TargetSheet({
                           name="amount"
                           inputMode="decimal"
                           autoComplete="off"
-                          placeholder="3 500"
+                          placeholder={t("sheet.take.amountPlaceholder")}
                           className="sheet__input tnum"
                           required
                           ref={(node) => {
@@ -833,17 +853,19 @@ export function TargetSheet({
                         />
                         <span className="t-body-s tone-3">
                           {offGrid
-                            ? "Off-grid: no reference, the quote is what counts."
-                            : `The grid announced ${formatEuros(price.priceCents, { decimals: "never" })} on signature.`}
+                            ? t("sheet.take.offgridHint")
+                            : t("sheet.take.gridHint", {
+                                amount: formatEuros(price.priceCents, { decimals: "never" }),
+                              })}
                         </span>
                       </label>
                       <label className="sheet__field">
-                        <Badge>What was said</Badge>
+                        <Badge>{t("sheet.take.noteLabel")}</Badge>
                         <textarea
                           name="note"
                           rows={2}
                           className="sheet__input"
-                          placeholder="Signed after Tuesday’s visit."
+                          placeholder={t("sheet.take.notePlaceholder")}
                         />
                       </label>
                       <div className="sheet__actions">
@@ -853,11 +875,11 @@ export function TargetSheet({
                           disabled={inProgress}
                           onClick={() => setInput(null)}
                         >
-                          Cancel
+                          {t("sheet.cancel")}
                         </Button>
                         <Button type="submit" variant="primary" disabled={inProgress}>
                           {advancePending && <Spinner />}
-                          Record the take
+                          {t("sheet.take.submit")}
                         </Button>
                       </div>
                     </form>
@@ -868,21 +890,20 @@ export function TargetSheet({
                       <input type="hidden" name="id" value={target.id} />
                       <input type="hidden" name="to" value="withdrawn" />
                       <label className="sheet__field">
-                        <Badge>The reason, verbatim</Badge>
+                        <Badge>{t("sheet.withdraw.reasonLabel")}</Badge>
                         <textarea
                           name="note"
                           rows={2}
                           className="sheet__input"
-                          placeholder="Redesigned four months ago."
+                          placeholder={t("sheet.withdraw.placeholder")}
                           required
                         />
                         <span className="t-body-s tone-3">
-                          A withdrawal is a decision, not a defeat. It gets re-read in six
-                          months: write down what was said.
+                          {t("sheet.withdraw.hint")}
                         </span>
                       </label>
                       <Button type="submit" variant="secondary" disabled={inProgress}>
-                        Record the withdrawal
+                        {t("sheet.withdraw.submit")}
                       </Button>
                     </form>
                   ) : null}
@@ -892,15 +913,13 @@ export function TargetSheet({
 
             <section className="sheet__section">
               <div className="sheet__section-head">
-                <Badge asChild><h3>The neighbours, within 300 m</h3></Badge>
+                <Badge asChild><h3>{t("sheet.neighbours.title")}</h3></Badge>
                 {/* The businesses come from the survey, the distance is computed. */}
                 <Sources keys={["sirene", "computed"]} />
               </div>
               {neighbours.length === 0 ? (
                 <p className="t-body-s tone-2">
-                  No surveyed business within walking distance. Survey the neighbourhood
-                  before calling: one reference you can point at while walking beats ten
-                  arguments.
+                  {t("sheet.neighbours.empty")}
                 </p>
               ) : (
                 <ul className="sheet__neighbours">
@@ -918,7 +937,7 @@ export function TargetSheet({
                           {formatEuros(neighbour.expectancyCents, { decimals: "never" })}
                           {neighbour.state === "spotted"
                             ? ""
-                            : ` · ${STATE_LABEL[neighbour.state]}`}
+                            : ` · ${stateText[neighbour.state]}`}
                         </span>
                       </button>
                     </li>
@@ -939,34 +958,31 @@ export function TargetSheet({
                   void copyAsPrompt();
                 }}
               >
-                {copied === "fact" ? "Copied ✓" : "Copy as prompt"}
+                {copied === "fact" ? t("sheet.copy.done") : t("sheet.copy.button")}
               </Button>
             </div>
 
             {copied === "fact" ? (
               <p className="t-body-s tone-2" role="status">
-                The Markdown brief is on the clipboard: identity, spoils, the five facts,
-                the product of factors, the neighbours and the log. No personal contact
-                details for any director are included.
+                {t("sheet.copy.explain")}
               </p>
             ) : null}
 
             {copied === "manual" ? (
               <div className="sheet__entry-input panel">
-                <Badge asChild><p>Clipboard refused</p></Badge>
+                <Badge asChild><p>{t("sheet.copy.refusedTitle")}</p></Badge>
                 <p className="t-body-s tone-2">
-                  The browser did not grant clipboard access — that is what happens
-                  outside HTTPS. The brief is below, select it.
+                  {t("sheet.copy.refusedBody")}
                 </p>
                 <textarea
                   className="sheet__input t-mono"
                   rows={8}
                   readOnly
-                  value={sheetAsMarkdown(detail, outcomeCount)}
+                  value={sheetAsMarkdown(t, detail, outcomeCount)}
                   onFocus={(event) => event.currentTarget.select()}
                 />
                 <Button variant="quiet" size="compact" onClick={() => setCopied("idle")}>
-                  Close
+                  {t("sheet.copy.close")}
                 </Button>
               </div>
             ) : null}
@@ -982,7 +998,7 @@ export function TargetSheet({
           >
             <section className="sheet__section">
               <div className="sheet__section-head">
-                <Badge asChild><h3>The five facts</h3></Badge>
+                <Badge asChild><h3>{t("sheet.facts.title")}</h3></Badge>
                 {enrichButton}
               </div>
               <div className="sheet__facts panel">
@@ -993,7 +1009,11 @@ export function TargetSheet({
                       value={fact.value}
                       verbatim={fact.verbatim}
                       sources={fact.sources}
-                      surveyedOn={fact.surveyedOn ? `recorded on ${fact.surveyedOn}` : null}
+                      surveyedOn={
+                        fact.surveyedOn
+                          ? t("sheet.facts.recordedOn", { date: fact.surveyedOn })
+                          : null
+                      }
                       stale={fact.stale}
                       delayIndex={index}
                     />
@@ -1004,19 +1024,17 @@ export function TargetSheet({
                 ))}
               </div>
               <p className="t-body-s tone-3">
-                A statistic with no data is not a zero: it is excluded from the
-                calculation, and the note under the arc says how many facts it was
-                built on.
+                {t("sheet.facts.noZero")}
               </p>
               {target.googleStale ? (
                 <p className="t-body-s sheet__stale">
-                  Google facts purged — past 30 days. Refresh to get them back.
+                  {t("sheet.facts.purged")}
                 </p>
               ) : null}
             </section>
 
             <section className="sheet__section">
-              <Badge asChild><h3>The record</h3></Badge>
+              <Badge asChild><h3>{t("sheet.record.title")}</h3></Badge>
               <div className="panel sheet__fields">
                 {main.map(fieldRow)}
               </div>
@@ -1026,7 +1044,11 @@ export function TargetSheet({
                   counts are in the summary. */}
               <details className="sheet__all">
                 <summary className="t-body-s sheet__all-summary">
-                  {`All ${counting.total} fields · ${counting.filled} recorded · ${counting.empty} empty`}
+                  {t("sheet.record.summary", {
+                    total: counting.total,
+                    filled: counting.filled,
+                    empty: counting.empty,
+                  })}
                 </summary>
                 <div className="sheet__all-body">
                   {groups.map((group) => (
@@ -1044,7 +1066,7 @@ export function TargetSheet({
             {/* The factor product, scrolled to from the head figure. */}
             <section className="sheet__section" ref={calculationRef}>
               <div className="sheet__section-head">
-                <Badge asChild><h3>Where this figure comes from</h3></Badge>
+                <Badge asChild><h3>{t("sheet.calc.title")}</h3></Badge>
                 {/* None of this was surveyed; all of it is derived. */}
                 <Sources keys={["computed"]} />
               </div>
@@ -1076,13 +1098,18 @@ export function TargetSheet({
                     as an error, so both rows spell out the conversion. */}
                 <li className="sheet__factor sheet__factor--total">
                   <span className="t-body">
-                    {`Raw product ${formatNumber(success.rawProbability, 4)} odds, clamped then rounded to the nearest 5`}
+                    {t("sheet.calc.raw", {
+                      value: formatNumber(success.rawProbability, 4),
+                    })}
                   </span>
                   <span className="t-body tnum">{percent(success.percent)}</span>
                 </li>
                 <li className="sheet__factor">
                   <span className="t-body">
-                    {`Resistance = 100 − ${success.percent}, that is ${band.label}`}
+                    {t("sheet.calc.resistance", {
+                      percent: success.percent,
+                      band: band.label,
+                    })}
                   </span>
                   <span className="t-title-3 tnum">
                     {percent(target.resistancePercent)}
@@ -1090,19 +1117,17 @@ export function TargetSheet({
                 </li>
               </ul>
               <p className="t-body-s tone-3">
-                {`The product is clamped between 2 % and 85 % odds before rounding: an estimate built on a handful of facts does not have three significant digits, and showing three would be a promise we cannot keep.`}
+                {t("sheet.calc.clampNote")}
               </p>
             </section>
 
             {/* A pictogram alone is a riddle: the legend carries the full name,
                 what the source provides, and its address when it has one. */}
             <section className="sheet__section">
-              <Badge asChild><h3>Where all of this comes from</h3></Badge>
+              <Badge asChild><h3>{t("sheet.sources.title")}</h3></Badge>
               <SourceLegend keys={citedSources} className="panel" />
               <p className="t-body-s tone-3">
-                Only the sources this record actually uses are listed. A missing one is
-                not a gap in the product: it is an enrichment that has not run, or a
-                fact nobody has written down yet.
+                {t("sheet.sources.note")}
               </p>
             </section>
           </div>
@@ -1117,12 +1142,12 @@ export function TargetSheet({
           >
             <section className="sheet__section">
               <div className="sheet__section-head">
-                <Badge asChild><h3>The log</h3></Badge>
+                <Badge asChild><h3>{t("sheet.log.title")}</h3></Badge>
                 {/* The only source nobody can refresh on your behalf. */}
                 <Sources keys={["log"]} />
               </div>
               {log.length === 0 ? (
-                <p className="t-body-s tone-2">Nothing has been said yet.</p>
+                <p className="t-body-s tone-2">{t("sheet.log.empty")}</p>
               ) : (
                 <ol className="sheet__log">
                   {log.map((entry) => (
@@ -1132,7 +1157,7 @@ export function TargetSheet({
                       </span>
                       <span className="sheet__entry-body">
                         <span className="t-body">
-                          {EVENT_LABEL[entry.kind]}
+                          {eventText[entry.kind]}
                           {entry.valueCents !== null
                             ? ` · ${formatEuros(entry.valueCents, { decimals: "never" })}`
                             : ""}
@@ -1146,7 +1171,7 @@ export function TargetSheet({
                 </ol>
               )}
               <p className="t-body-s tone-3">
-                Plain text: what was said, and when.
+                {t("sheet.log.note")}
               </p>
             </section>
           </div>

@@ -10,6 +10,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db, events, targets, zones, type NewTarget, type Zone } from "@/lib/db";
 import { areaKm2, normalizeBbox, pointInPolygon } from "@/lib/geo";
+import { getT } from "@/lib/i18n/server";
 import {
   HARVEST_PAGES_PER_CALL,
   MAX_TARGETS_PER_HARVEST,
@@ -205,18 +206,22 @@ export async function openZone(
 ): Promise<{ zoneId: string; bbox: Bbox; nafCodes: string[] } | ZoneRefusal> {
   const bbox = normalizeBbox(request.bbox);
   const area = areaKm2(bbox);
+  const t = await getT();
 
   if (!Number.isFinite(area) || area <= 0) {
     return {
       reason: "surface",
-      message: "Unreadable sector. Draw it again on the map.",
+      message: t("lib.harvest.unreadableSector"),
     };
   }
 
   if (area > MAX_ZONE_AREA_KM2) {
     return {
       reason: "surface",
-      message: `Sector too large: ${area.toFixed(1)} km² for ${MAX_ZONE_AREA_KM2} km² at most. Draw a neighbourhood rather than a town.`,
+      message: t("lib.harvest.sectorTooLarge", {
+        area: area.toFixed(1),
+        max: MAX_ZONE_AREA_KM2,
+      }),
     };
   }
 
@@ -236,7 +241,7 @@ export async function openZone(
     .returning({ id: zones.id });
 
   if (!created) {
-    return { reason: "surface", message: "Sector cannot be opened." };
+    return { reason: "surface", message: t("lib.harvest.sectorNotOpened") };
   }
 
   return { zoneId: created.id, bbox, nafCodes };
@@ -320,6 +325,7 @@ export type HarvestSlice = {
 export async function harvestSlice(
   request: HarvestSliceRequest,
 ): Promise<HarvestSlice> {
+  const t = await getT();
   const bbox = normalizeBbox(request.bbox);
   const circle = circleForBbox(bbox);
   const nafCodes =
@@ -399,7 +405,7 @@ export async function harvestSlice(
         message:
           error instanceof SireneError
             ? error.message
-            : "The company register did not answer.",
+            : t("lib.harvest.registerNoAnswer"),
         retryable: error instanceof SireneError ? error.retryable : true,
         page,
       };
@@ -429,7 +435,7 @@ export async function harvestSlice(
     } catch (error) {
       // a failed write is not retryable: insisting would only burn quota.
       failure = {
-        message: "Could not save.",
+        message: t("lib.harvest.saveFailed"),
         retryable: false,
         page,
       };

@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/accounts";
 import { db, priceGrids } from "@/lib/db";
+import { getT } from "@/lib/i18n/server";
 
 import { getPriceGrid } from "../queries";
 import { readGridForm } from "./form";
@@ -19,8 +20,9 @@ export async function savePriceGridAction(
   formData: FormData,
 ): Promise<PriceGridState> {
   const owner = await requireUser();
+  const t = await getT();
 
-  const { grid, fields } = readGridForm(formData, await getPriceGrid(owner));
+  const { grid, fields } = readGridForm(formData, await getPriceGrid(owner), t);
   if (grid === null) {
     return { error: null, fields, saved: false };
   }
@@ -35,7 +37,7 @@ export async function savePriceGridAction(
       });
   } catch (error) {
     console.error("[grid]", error);
-    return { error: "Grid not saved. Try again.", fields: {}, saved: false };
+    return { error: t("pricing.error.save"), fields: {}, saved: false };
   }
 
   revalidatePath("/");
@@ -56,12 +58,13 @@ export async function resetPriceGridAction(
   _formData: FormData,
 ): Promise<PriceGridState> {
   const owner = await requireUser();
+  const t = await getT();
 
   try {
     await db.delete(priceGrids).where(eq(priceGrids.ownerId, owner.id));
   } catch (error) {
     console.error("[grid:reset]", error);
-    return { error: "Grid not reset. Try again.", fields: {}, saved: false };
+    return { error: t("pricing.error.reset"), fields: {}, saved: false };
   }
 
   revalidatePath("/");

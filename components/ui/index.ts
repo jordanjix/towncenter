@@ -58,6 +58,7 @@ export {
   Source,
   Sources,
   SourceLegend,
+  sourceName,
   SOURCES,
   SOURCE_ORDER,
   type SourceKey,

@@ -13,6 +13,7 @@ import { eq, ne, sql } from "drizzle-orm";
 
 import { getSession } from "@/lib/auth";
 import { db, users } from "@/lib/db";
+import { getT } from "@/lib/i18n/server";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import type { UserRole } from "@/lib/types";
 
@@ -117,12 +118,11 @@ export async function signupState(): Promise<SignupState> {
     return { open: true, isFirstAccount: false, reason: "" };
   }
 
+  const t = await getT();
   return {
     open: false,
     isFirstAccount: false,
-    reason:
-      "This instance is not accepting new accounts. Its owner can open them by " +
-      "setting ALLOW_SIGNUPS=true.",
+    reason: t("lib.accounts.closed"),
   };
 }
 
@@ -162,9 +162,10 @@ export async function createAccount(entry: {
   displayName?: string | null;
 }): Promise<SignupResult> {
   const email = normalizeEmail(entry.email);
+  const t = await getT();
 
   if (email === "") {
-    return { ok: false, field: "email", message: "Enter an email address." };
+    return { ok: false, field: "email", message: t("lib.accounts.emailRequired") };
   }
 
   const state = await signupState();
@@ -200,7 +201,7 @@ export async function createAccount(entry: {
       });
 
     if (!created) {
-      return { ok: false, field: "_", message: "Account not created. Try again." };
+      return { ok: false, field: "_", message: t("lib.accounts.notCreated") };
     }
 
     return { ok: true, account: toAccount(created) };
@@ -210,7 +211,7 @@ export async function createAccount(entry: {
       return {
         ok: false,
         field: "email",
-        message: "An account already uses this address. Sign in instead.",
+        message: t("lib.accounts.emailTaken"),
       };
     }
     throw error;

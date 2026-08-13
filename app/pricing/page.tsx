@@ -1,8 +1,10 @@
-import type { Route } from "next";
+import type { Metadata, Route } from "next";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui";
 import { requireUser } from "@/lib/accounts";
+import type { MessageKey } from "@/lib/i18n/messages";
+import { getT } from "@/lib/i18n/server";
 import type { ScoringFacts } from "@/lib/types";
 
 import { getPriceGrid } from "../queries";
@@ -13,9 +15,10 @@ import "./pricing.css";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Pricing · Towncenter",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t("pricing.metaTitle") };
+}
 
 // Invented businesses, and they must stay invented: this screen has to give the
 // SAME result for everyone, otherwise two people comparing grids would in fact
@@ -37,9 +40,9 @@ const COMMON = {
   isFranchiseGroupSite: false,
 };
 
-const WITNESSES: Record<string, { who: string; facts: ScoringFacts }> = {
+const WITNESSES: Record<string, { whoKey: MessageKey; facts: ScoringFacts }> = {
   baseCents: {
-    who: "A young shop · 12 reviews · no website · no usable photo",
+    whoKey: "pricing.witness.base",
     facts: {
       ...COMMON,
       openEstablishmentCount: 1,
@@ -49,7 +52,7 @@ const WITNESSES: Record<string, { who: string; facts: ScoringFacts }> = {
     },
   },
   fullSiteCents: {
-    who: "A typical shop · one address · 235 reviews · no website",
+    whoKey: "pricing.witness.fullSite",
     facts: {
       ...COMMON,
       openEstablishmentCount: 1,
@@ -59,7 +62,7 @@ const WITNESSES: Record<string, { who: string; facts: ScoringFacts }> = {
     },
   },
   multiPageCents: {
-    who: "A restaurant · a nine-page site, unreachable · 180 reviews",
+    whoKey: "pricing.witness.multiPage",
     facts: {
       ...COMMON,
       openEstablishmentCount: 1,
@@ -69,7 +72,7 @@ const WITNESSES: Record<string, { who: string; facts: ScoringFacts }> = {
     },
   },
   multiAddressCents: {
-    who: "A three-shop chain · one owner · no website",
+    whoKey: "pricing.witness.multiAddress",
     facts: {
       ...COMMON,
       openEstablishmentCount: 3,
@@ -79,7 +82,7 @@ const WITNESSES: Record<string, { who: string; facts: ScoringFacts }> = {
     },
   },
   recurringBaseCents: {
-    who: "A typical shop · one address · 235 reviews · no website",
+    whoKey: "pricing.witness.recurringBase",
     facts: {
       ...COMMON,
       openEstablishmentCount: 1,
@@ -93,20 +96,28 @@ const WITNESSES: Record<string, { who: string; facts: ScoringFacts }> = {
 export default async function PricingPage() {
   const owner = await requireUser();
   const grid = await getPriceGrid(owner);
+  const t = await getT();
+
+  const witnesses = Object.fromEntries(
+    Object.entries(WITNESSES).map(([key, { whoKey, facts }]) => [
+      key,
+      { who: t(whoKey), facts },
+    ]),
+  );
 
   return (
     <main className="pricing">
       <header className="pricing__head">
-        <Badge asChild><h2>Pricing</h2></Badge>
+        <Badge asChild><h2>{t("pricing.title")}</h2></Badge>
         <div className="pricing__head-act">
           <ResetGrid />
           <Link className="t-body-s pricing__back" href={"/" as Route}>
-            {"Back to the map"}
+            {t("pricing.backToMap")}
           </Link>
         </div>
       </header>
 
-      <PriceGridForm grid={grid} witnesses={WITNESSES} />
+      <PriceGridForm grid={grid} witnesses={witnesses} />
     </main>
   );
 }

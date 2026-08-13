@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Loot, RollingAmount, Source, Badge } from "@/components/ui";
 import { formatEuros } from "@/lib/format";
+import { useT } from "@/lib/i18n/client";
 import { DEFAULT_PRICE_GRID } from "@/lib/priceGrid";
 import { PRICE_OFFER_LABELS, scorePlace } from "@/lib/scoring";
 import type { PriceGrid, ScoringFacts } from "@/lib/types";
@@ -22,6 +23,7 @@ function scoreUnder(grid: PriceGrid, sample: ScoringFacts) {
 const euros = (cents: number) => formatEuros(cents, { decimals: "never" });
 
 export function Witness({ who, sample, draft, saved }: WitnessProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [lastReadable, setLastReadable] = useState<PriceGrid>(saved);
 
@@ -55,7 +57,7 @@ export function Witness({ who, sample, draft, saved }: WitnessProps) {
         <span className="quote__toggle-who t-body-s">{who.split(" · ")[0]}</span>
         <span className="quote__toggle-sum tnum">
           {offGrid ? (
-            "Off-grid"
+            t("pricing.witness.offGrid")
           ) : (
             <RollingAmount cents={current.price.value12MonthsCents} />
           )}
@@ -87,7 +89,7 @@ export function Witness({ who, sample, draft, saved }: WitnessProps) {
 
                 <div className="quote__line" data-soft>
                   <dt className="t-body-s">
-                    {`Hosting & upkeep, ${shown.valueHorizonMonths} months`}
+                    {t("pricing.witness.upkeep", { months: shown.valueHorizonMonths })}
                   </dt>
                   <dd className="t-body-s tnum">
                     <RollingAmount cents={upkeepCents} />
@@ -106,7 +108,9 @@ export function Witness({ who, sample, draft, saved }: WitnessProps) {
               </dl>
 
               <div className="quote__total">
-                <Badge>{`Worth over ${shown.valueHorizonMonths} months`}</Badge>
+                <Badge>
+                  {t("pricing.witness.worth", { months: shown.valueHorizonMonths })}
+                </Badge>
                 <Loot
                   cents={current.price.value12MonthsCents}
                   rolling
@@ -119,15 +123,19 @@ export function Witness({ who, sample, draft, saved }: WitnessProps) {
 
           {holdingLastReadable ? (
             <p className="quote__foot t-body-s" role="status">
-              {"Last readable grid — a field is empty or out of range."}
+              {t("pricing.witness.lastReadable")}
             </p>
           ) : (
             <p className="quote__foot t-body-s tnum">
               {delta !== 0
-                ? `${delta > 0 ? "▲ +" : "▼ −"}${euros(Math.abs(delta))} vs saved`
-                : "Matches the saved grid."}
+                ? t("pricing.witness.deltaVsSaved", {
+                    delta: `${delta > 0 ? "▲ +" : "▼ −"}${euros(Math.abs(delta))}`,
+                  })
+                : t("pricing.witness.matchesSaved")}
               {differsFromDefault
-                ? ` · default ${euros(fallback.price.value12MonthsCents)}`
+                ? ` · ${t("pricing.witness.default", {
+                    amount: euros(fallback.price.value12MonthsCents),
+                  })}`
                 : ""}
             </p>
           )}

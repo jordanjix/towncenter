@@ -4,7 +4,8 @@
 //
 // There is no "claim" button anywhere: progress appears when a fact is
 // recorded, never on request. The selection rule is shown line by line —
-// `listFront` returns its `reason` in plain text and the screen displays it.
+// `listFront` returns its `reason` as message keys and the screen translates
+// and displays it.
 
 import { useId, useState } from "react";
 
@@ -14,6 +15,8 @@ import { Badge } from "@/components/ui";
 // from the source rather than writing a second one.
 import { nonBreaking } from "@/components/ui/percent";
 import { formatEuros } from "@/lib/format";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey, Translate } from "@/lib/i18n/messages";
 
 export type DailyFrontProps = {
   rows: readonly FrontLine[];
@@ -22,18 +25,32 @@ export type DailyFrontProps = {
   className?: string;
 };
 
+// each action verb has its counted form ("3 to call"), picked here
+const COUNT_KEY: Partial<Record<MessageKey, MessageKey>> = {
+  "front.action.followUp": "front.count.followUp",
+  "front.action.call": "front.count.call",
+  "front.action.walkPast": "front.count.walkPast",
+  "front.action.priceIt": "front.count.priceIt",
+};
+
 /**
  * The verbs of the day, counted.
  *
  * The order comes from `listFront`, which already sorted the rows: grouping
  * only. Re-sorting here would give a header that contradicts the rows below.
  */
-function verbsOfTheDay(rows: readonly FrontLine[]): { verb: string; total: number }[] {
-  const counts = new Map<string, number>();
+function verbsOfTheDay(
+  rows: readonly FrontLine[],
+): { verb: MessageKey; total: number }[] {
+  const counts = new Map<MessageKey, number>();
   for (const row of rows) {
     counts.set(row.action, (counts.get(row.action) ?? 0) + 1);
   }
   return [...counts.entries()].map(([verb, total]) => ({ verb, total }));
+}
+
+function reasonText(t: Translate, row: FrontLine): string {
+  return row.reason.map((part) => t(part.key, part.params)).join(" · ");
 }
 
 export function DailyFront({
@@ -42,6 +59,7 @@ export function DailyFront({
   onSelect,
   className,
 }: DailyFrontProps) {
+  const t = useT();
   const overdue = rows.filter((row) => row.overdue).length;
 
   // Lateness decides the INITIAL state only. An effect reopening the panel
@@ -64,21 +82,23 @@ export function DailyFront({
         aria-controls={panelId}
         onClick={() => setOpen((state) => !state)}
       >
-        <Badge>Today</Badge>
+        <Badge>{t("front.title")}</Badge>
 
         <span className="t-body-s front__verbs tnum">
           {rows.length === 0 ? (
-            <span className="tone-2">nothing to do today</span>
+            <span className="tone-2">{t("front.nothingToday")}</span>
           ) : (
             verbs.map(({ verb, total }, index) => (
               <span key={verb}>
                 {index > 0 ? <span className="tone-3"> · </span> : null}
                 <span
                   className={
-                    verb === "Follow up" && overdue > 0 ? "front__overdue" : "tone-2"
+                    verb === "front.action.followUp" && overdue > 0
+                      ? "front__overdue"
+                      : "tone-2"
                   }
                 >
-                  {`${total} to ${verb.toLowerCase()}`}
+                  {t(COUNT_KEY[verb] ?? verb, { n: total })}
                 </span>
               </span>
             ))
@@ -92,17 +112,10 @@ export function DailyFront({
 
       <div id={panelId} className="front__panel" hidden={!open}>
         {rows.length === 0 ? (
-          <p className="t-body-s tone-2">
-            Nothing waiting. Survey a sector, or mark the ones you have already
-            seen.
-          </p>
+          <p className="t-body-s tone-2">{t("front.empty")}</p>
         ) : (
           <>
-            <p className="t-body-s tone-3 front__what">
-              Where to start today, drawn from the whole territory — not from the
-              current view. Ordered by commercial urgency: a late follow-up comes
-              before a first call, even a cheaper one.
-            </p>
+            <p className="t-body-s tone-3 front__what">{t("front.explain")}</p>
             <ol className="front__list">
               {rows.map((row, index) => {
                 const offGrid = row.target.score.price.kind === "off-grid";
@@ -119,19 +132,19 @@ export function DailyFront({
                       <span className="front__body">
                         <span className="t-title-3 front__name">{row.target.name}</span>
                         <span className="t-body-s tone-2 front__rule">
-                          {nonBreaking(row.reason)}
+                          {nonBreaking(reasonText(t, row))}
                         </span>
                       </span>
                       <span className="front__right">
                         <span className="t-title-3 tnum front__loot">
                           {offGrid
-                            ? "Off-grid"
+                            ? t("front.offGrid")
                             : formatEuros(
                                 row.target.score.price.value12MonthsCents,
                                 { decimals: "never" },
                               )}
                         </span>
-                        <span className="t-micro front__verb">{row.action}</span>
+                        <span className="t-micro front__verb">{t(row.action)}</span>
                       </span>
                     </button>
                   </li>

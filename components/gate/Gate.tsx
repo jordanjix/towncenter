@@ -14,6 +14,8 @@ import Link from "next/link";
 import { WorldMap } from "./WorldMap";
 import townCentre from "./towncenter.png";
 
+import { getT } from "@/lib/i18n/server";
+
 import styles from "./gate.module.css";
 
 export type GateProps = {
@@ -27,7 +29,9 @@ export type GateProps = {
   toggle?: React.ReactNode;
 };
 
-export function Gate({ title, subtitle, children, toggle }: GateProps) {
+export async function Gate({ title, subtitle, children, toggle }: GateProps) {
+  const t = await getT();
+
   return (
     <main className={styles.frame}>
       <div className={styles.gate}>
@@ -45,7 +49,7 @@ export function Gate({ title, subtitle, children, toggle }: GateProps) {
           </div>
 
           <div className={styles.footerRule}>
-            <span>Neighbourhood prospecting, street by street.</span>
+            <span>{t("gate.tagline")}</span>
           </div>
         </div>
 

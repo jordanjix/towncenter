@@ -1,4 +1,5 @@
 import { formatEuros, type EurosOptions } from "@/lib/format";
+import { useT } from "@/lib/i18n/client";
 
 import { Badge } from "./badge";
 import { nonBreaking } from "./percent";
@@ -46,6 +47,7 @@ export function Loot({
   decimals = "never",
   className,
 }: LootProps) {
+  const t = useT();
   const sizeClass = SIZE_CLASS[size];
   const unknown = cents === null || cents === undefined || !Number.isFinite(cents);
 
@@ -57,17 +59,19 @@ export function Loot({
 
       {offGrid ? (
         <>
-          <span className="loot__off-grid">Off-grid</span>
+          <span className="loot__off-grid">{t("ui.loot.offGrid")}</span>
           <span className="t-body-s tone-2">
-            {nonBreaking(reason ?? "The work goes beyond the default offer: to price by hand.")}
+            {nonBreaking(reason ?? t("ui.loot.offGridReason"))}
           </span>
         </>
       ) : unknown ? (
         <>
-          <span className={cx(sizeClass, "tone-2")} aria-label="amount unknown">
+          <span className={cx(sizeClass, "tone-2")} aria-label={t("ui.loot.unknown")}>
             —
           </span>
-          <span className="t-body-s tone-2">{nonBreaking(reason ?? "Not priced")}</span>
+          <span className="t-body-s tone-2">
+            {nonBreaking(reason ?? t("ui.loot.notPriced"))}
+          </span>
         </>
       ) : (
         <>
@@ -83,10 +87,10 @@ export function Loot({
           Number.isFinite(recurringCents) ? (
             <span className="t-body-s tnum">
               <span className="loot__recurring">
-                {recurringIncluded ? "incl. " : "+ "}
+                {recurringIncluded ? `${t("ui.loot.included")} ` : "+ "}
                 {formatEuros(recurringCents, { decimals: "never" })}
               </span>
-              <span className="loot__recurring-unit">/month</span>
+              <span className="loot__recurring-unit">{t("ui.loot.perMonth")}</span>
             </span>
           ) : null}
           {reason ? <span className="t-body-s tone-2">{nonBreaking(reason)}</span> : null}

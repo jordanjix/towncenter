@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 
 import { Button, RollingAmount } from "@/components/ui";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/messages";
 import type { PriceGrid, ScoringFacts } from "@/lib/types";
 
 import { savePriceGridAction } from "./actions";
@@ -14,41 +16,41 @@ import { Witness } from "./Witness";
 
 type EditedField = {
   key: keyof PriceGrid;
-  tab: string;
-  label: string;
-  when: string;
+  tab: MessageKey;
+  label: MessageKey;
+  when: MessageKey;
 };
 
 const FIELDS: EditedField[] = [
   {
     key: "baseCents",
-    tab: "Base",
-    label: "Base tier",
-    when: "One address, few reviews, no usable photo — the lowest deal you would sign.",
+    tab: "pricing.field.base.tab",
+    label: "pricing.field.base.label",
+    when: "pricing.field.base.when",
   },
   {
     key: "fullSiteCents",
-    tab: "Full site",
-    label: "Full site",
-    when: "One address, a site to build. The offer that sells most often, and the yardstick a target's dot size on the map is measured against.",
+    tab: "pricing.field.fullSite.tab",
+    label: "pricing.field.fullSite.label",
+    when: "pricing.field.fullSite.when",
   },
   {
     key: "multiPageCents",
-    tab: "Multi-page",
-    label: "Multi-page site",
-    when: "From six pages: detailed menu, forms, booking — a structure rather than a storefront.",
+    tab: "pricing.field.multiPage.tab",
+    label: "pricing.field.multiPage.label",
+    when: "pricing.field.multiPage.when",
   },
   {
     key: "multiAddressCents",
-    tab: "Multi-address",
-    label: "Multi-address site",
-    when: "Two to five addresses. The work changes in nature, not just in volume.",
+    tab: "pricing.field.multiAddress.tab",
+    label: "pricing.field.multiAddress.label",
+    when: "pricing.field.multiAddress.when",
   },
   {
     key: "recurringBaseCents",
-    tab: "Monthly",
-    label: "Monthly base",
-    when: "Hosting, domain, backups, small fixes. Deliberately low: it keeps the relationship open, it is not where the margin is.",
+    tab: "pricing.field.recurringBase.tab",
+    label: "pricing.field.recurringBase.label",
+    when: "pricing.field.recurringBase.when",
   },
 ];
 
@@ -63,6 +65,7 @@ export function PriceGridForm({
   grid: PriceGrid;
   witnesses: Record<string, StepWitness>;
 }) {
+  const t = useT();
   const [state, action, inProgress] = useActionState(
     savePriceGridAction,
     INITIAL_PRICE_GRID_STATE,
@@ -138,7 +141,7 @@ export function PriceGridForm({
         className="pricing__layout"
         data-smash={smash === 0 ? undefined : smash % 2 === 0 ? "a" : "b"}
         onChange={(event) =>
-          setRead(readGridForm(new FormData(event.currentTarget), grid))
+          setRead(readGridForm(new FormData(event.currentTarget), grid, t))
         }
       >
         <div
@@ -173,7 +176,7 @@ export function PriceGridForm({
                 aria-pressed={index === step}
                 onClick={() => goTo(index)}
               >
-                <i className="pricing__tab-name t-micro">{item.tab}</i>
+                <i className="pricing__tab-name t-micro">{t(item.tab)}</i>
                 <b className="pricing__tab-value tnum">
                   <RollingAmount cents={Math.abs(shown[item.key] as number)} />
                 </b>
@@ -181,13 +184,15 @@ export function PriceGridForm({
             ))}
           </div>
 
-          <p className="pricing__when t-body-s">{activeField.when}</p>
+          <p className="pricing__when t-body-s">{t(activeField.when)}</p>
 
           <div className="pricing__rig">
             <button
               type="button"
               className="pricing__arrow"
-              aria-label={`Previous: ${FIELDS[(step - 1 + FIELDS.length) % FIELDS.length]!.label}`}
+              aria-label={t("pricing.arrow.previous", {
+                label: t(FIELDS[(step - 1 + FIELDS.length) % FIELDS.length]!.label),
+              })}
               onClick={() => goTo(step - 1, "back")}
             >
               <Chevron />
@@ -200,7 +205,7 @@ export function PriceGridForm({
                   className="pricing__big"
                   data-off={index === step ? undefined : ""}
                 >
-                  <span className="sr-only">{item.label}</span>
+                  <span className="sr-only">{t(item.label)}</span>
                   <input
                     name={item.key}
                     type="text"
@@ -222,7 +227,9 @@ export function PriceGridForm({
               type="button"
               className="pricing__arrow"
               data-next
-              aria-label={`Next: ${FIELDS[(step + 1) % FIELDS.length]!.label}`}
+              aria-label={t("pricing.arrow.next", {
+                label: t(FIELDS[(step + 1) % FIELDS.length]!.label),
+              })}
               onClick={() => goTo(step + 1, "forward")}
             >
               <Chevron />
@@ -248,11 +255,11 @@ export function PriceGridForm({
               className="pricing__save"
               disabled={inProgress || (hydrated && !dirty)}
             >
-              {inProgress ? "Saving…" : "Save the grid"}
+              {inProgress ? t("pricing.saving") : t("pricing.save")}
             </Button>
             {state.saved && !dirty ? (
               <p className="pricing__confirm t-body-s" role="status">
-                {"Saved. The map already follows."}
+                {t("pricing.saved")}
               </p>
             ) : null}
           </div>
@@ -282,12 +289,10 @@ export function PriceGridForm({
 
               <div className="pricing__done-body">
                 <h2 id="pricing-done-title" className="t-title-2">
-                  {state.error ? "Grid not saved" : "Grid saved"}
+                  {state.error ? t("pricing.done.notSaved") : t("pricing.done.saved")}
                 </h2>
                 <p className="t-body-s">
-                  {state.error
-                    ? state.error
-                    : "Every price on the map already follows it."}
+                  {state.error ? state.error : t("pricing.done.follows")}
                 </p>
 
                 <div className="pricing__done-act">
@@ -298,7 +303,7 @@ export function PriceGridForm({
                     autoFocus
                     onClick={() => router.push("/" as Route)}
                   >
-                    {"Back to the map"}
+                    {t("pricing.backToMap")}
                   </Button>
                   <Button
                     type="button"
@@ -306,7 +311,7 @@ export function PriceGridForm({
                     size="compact"
                     onClick={() => setFinishing(false)}
                   >
-                    {"Stay here"}
+                    {t("pricing.done.stay")}
                   </Button>
                 </div>
               </div>

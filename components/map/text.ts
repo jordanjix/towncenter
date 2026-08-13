@@ -3,6 +3,7 @@
 // browser render two different strings and every date mismatches on hydration.
 
 import { LOCALE, TIME_ZONE } from "@/lib/format";
+import type { Translate } from "@/lib/i18n/messages";
 import type { EventKind, TargetState } from "@/lib/types";
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
@@ -51,44 +52,57 @@ export function yearsSince(
 // the keys are stored in the database and drive `data-*` attributes; only the
 // labels are visible text.
 
-export const STATE_LABEL: Record<TargetState, string> = {
-  spotted: "Spotted",
-  studied: "Studied",
-  engaged: "Engaged",
-  taken: "Taken",
-  withdrawn: "Withdrawn",
-  dismissed: "Set aside",
-};
-
-export const APPROACH: readonly { state: TargetState; label: string }[] = [
-  { state: "spotted", label: "Spotted" },
-  { state: "studied", label: "Studied" },
-  { state: "engaged", label: "Engaged" },
-  { state: "taken", label: "Taken" },
-];
-
-export const EVENT_LABEL: Record<EventKind, string> = {
-  survey: "Spotted",
-  study: "Study",
-  contact: "Call",
-  reply: "Reply",
-  take: "Taken",
-  withdrawal: "Withdrawn",
-};
-
-export const ADVANCE_VERB: Record<"studied" | "engaged" | "taken" | "withdrawn", string> =
-  {
-    studied: "Mark as studied",
-    engaged: "Mark as engaged",
-    taken: "Take it",
-    withdrawn: "Withdraw",
+export function stateLabel(t: Translate): Record<TargetState, string> {
+  return {
+    spotted: t("state.spotted"),
+    studied: t("state.studied"),
+    engaged: t("state.engaged"),
+    taken: t("state.taken"),
+    withdrawn: t("state.withdrawn"),
+    dismissed: t("state.dismissed"),
   };
+}
 
-export const STEP_VERB: Record<"studied" | "engaged" | "taken", string> = {
-  studied: "Study",
-  engaged: "Call",
-  taken: "Sign",
-};
+export function approach(
+  t: Translate,
+): readonly { state: TargetState; label: string }[] {
+  return [
+    { state: "spotted", label: t("state.spotted") },
+    { state: "studied", label: t("state.studied") },
+    { state: "engaged", label: t("state.engaged") },
+    { state: "taken", label: t("state.taken") },
+  ];
+}
+
+export function eventLabel(t: Translate): Record<EventKind, string> {
+  return {
+    survey: t("event.survey"),
+    study: t("event.study"),
+    contact: t("event.contact"),
+    reply: t("event.reply"),
+    take: t("event.take"),
+    withdrawal: t("event.withdrawal"),
+  };
+}
+
+export function advanceVerb(
+  t: Translate,
+): Record<"studied" | "engaged" | "taken" | "withdrawn", string> {
+  return {
+    studied: t("state.advance.studied"),
+    engaged: t("state.advance.engaged"),
+    taken: t("state.advance.taken"),
+    withdrawn: t("state.advance.withdrawn"),
+  };
+}
+
+export function stepVerb(t: Translate): Record<"studied" | "engaged" | "taken", string> {
+  return {
+    studied: t("state.step.studied"),
+    engaged: t("state.step.engaged"),
+    taken: t("state.step.taken"),
+  };
+}
 
 // dates a step from the log; inverse of STATE_FOR_EVENT on the server side,
 // and the two must stay consistent.
@@ -101,12 +115,14 @@ export const STEP_EVENT: Record<TargetState, EventKind | null> = {
   dismissed: null,
 };
 
-export const PROXIMITY_LABEL: Record<string, string> = {
-  "same-street-capture": "Same street as a deal we took",
-  "near-live-deal": "Within 300 m of a live deal",
-  "in-zone": "No reference nearby",
-  "outside-zone": "Outside the worked sectors",
-};
+export function proximityLabel(t: Translate): Record<string, string> {
+  return {
+    "same-street-capture": t("map.proximity.same-street-capture"),
+    "near-live-deal": t("map.proximity.near-live-deal"),
+    "in-zone": t("map.proximity.in-zone"),
+    "outside-zone": t("map.proximity.outside-zone"),
+  };
+}
 
 export function plural(n: number, singular: string, pluralForm: string): string {
   return `${n} ${n > 1 ? pluralForm : singular}`;

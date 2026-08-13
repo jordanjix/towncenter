@@ -5,16 +5,20 @@ import type { Metadata } from "next";
 
 import { Gate } from "@/components/gate/Gate";
 import { signupState, getUser } from "@/lib/accounts";
+import { getT } from "@/lib/i18n/server";
 
 import { SignIn } from "./SignInForm";
 
 import styles from "@/components/gate/gate.module.css";
 
-export const metadata: Metadata = {
-  title: "Sign in — Towncenter",
-  // a gate has no business in a search engine index
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: t("gate.signin.metaTitle"),
+    // a gate has no business in a search engine index
+    robots: { index: false, follow: false },
+  };
+}
 
 // the gate reads the database to know whether the instance is waiting for its
 // owner, so it cannot be prerendered at build time
@@ -34,16 +38,18 @@ export default async function SignInPage() {
   // the FIRST account.
   if (signup.isFirstAccount) redirect("/signup");
 
+  const t = await getT();
+
   return (
     <Gate
-      title="Enter the field"
-      subtitle="Your sectors are where you left them."
+      title={t("gate.signin.title")}
+      subtitle={t("gate.signin.subtitle")}
       toggle={
         signup.open ? (
           <>
-            No account yet?{" "}
+            {t("gate.signin.noAccount")}{" "}
             <Link href="/signup" className={styles.link}>
-              Create one
+              {t("gate.signin.createOne")}
             </Link>
           </>
         ) : null

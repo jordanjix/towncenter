@@ -19,6 +19,7 @@ import "server-only";
 import { and, desc, eq, gte, inArray, lte, ne, sql, type SQL } from "drizzle-orm";
 
 import type { Account } from "@/lib/accounts";
+import type { MessageKey } from "@/lib/i18n/messages";
 import {
   db,
   events,
@@ -199,10 +200,16 @@ export type JournalEntry = {
   occurredAt: string;
 };
 
+/** One translatable segment; the render site joins them with " · ". */
+export type FrontReason = {
+  key: MessageKey;
+  params?: Record<string, string | number>;
+};
+
 export type FrontLine = {
   target: TargetRow;
-  action: string;
-  reason: string;
+  action: MessageKey;
+  reason: FrontReason[];
   daysSinceLastEvent: number | null;
   overdue: boolean;
 };
@@ -958,7 +965,9 @@ export async function listFront(owner: Account, limit = 5): Promise<FrontLine[]>
     return { target, daysSinceLastEvent };
   });
 
-  const scored = lines.map((line) => {
+  // labels leave as MessageKey + params, translated at the render site;
+  // `lootReason` is scoring text and travels verbatim through a pass-through key
+  const scored = lines.map((line): FrontLine & { priority: number } => {
     const { target, daysSinceLastEvent } = line;
 
     if (target.state === "engaged") {
@@ -966,11 +975,11 @@ export async function listFront(owner: Account, limit = 5): Promise<FrontLine[]>
       const overdue = late >= FOLLOWUP_AFTER_DAYS;
       return {
         ...line,
-        action: "Follow up",
+        action: "front.action.followUp",
         reason:
           daysSinceLastEvent === null
-            ? "engaged, no trace of contact"
-            : `follow-up due for ${late} d`,
+            ? [{ key: "front.reason.engagedNoTrace" }]
+            : [{ key: "front.reason.followupDue", params: { n: late } }],
         priority: overdue ? 0 : 1,
         overdue,
       };
@@ -979,8 +988,11 @@ export async function listFront(owner: Account, limit = 5): Promise<FrontLine[]>
     if (target.state === "studied") {
       return {
         ...line,
-        action: "Call",
-        reason: `resistance ${target.resistancePercent} % · ${target.lootReason}`,
+        action: "front.action.call",
+        reason: [
+          { key: "front.reason.resistance", params: { p: target.resistancePercent } },
+          { key: "front.reason.verbatim", params: { reason: target.lootReason } },
+        ],
         priority: 2,
         overdue: false,
       };
@@ -988,8 +1000,8 @@ export async function listFront(owner: Account, limit = 5): Promise<FrontLine[]>
 
     return {
       ...line,
-      action: "Walk past",
-      reason: target.lootReason,
+      action: "front.action.walkPast",
+      reason: [{ key: "front.reason.verbatim", params: { reason: target.lootReason } }],
       priority: 3,
       overdue: false,
     };
@@ -1024,8 +1036,8 @@ export async function listFront(owner: Account, limit = 5): Promise<FrontLine[]>
         ...bestOffGrid,
         // the verb follows the seat: an off-grid target is not called, it is
         // PRICED: a visit and a hand-written quote
-        action: "Price it",
-        reason: `${bestOffGrid.reason} · seat reserved for off-grid`,
+        action: "front.action.priceIt",
+        reason: [...bestOffGrid.reason, { key: "front.reason.offGridSeat" }],
       };
     }
   }

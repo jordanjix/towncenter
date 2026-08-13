@@ -1,3 +1,4 @@
+import type { Translate } from "@/lib/i18n/messages";
 import { PRICE_GRID_SCHEMA } from "@/lib/priceGrid";
 import type { PriceGrid, PriceOffer } from "@/lib/types";
 
@@ -74,7 +75,11 @@ export type GridForm = {
   fields: Record<string, string>;
 };
 
-export function readGridForm(formData: FormData, base: PriceGrid): GridForm {
+export function readGridForm(
+  formData: FormData,
+  base: PriceGrid,
+  t: Translate,
+): GridForm {
   const fields: Record<string, string> = {};
   const raw: Record<string, unknown> = { ...base };
 
@@ -82,7 +87,7 @@ export function readGridForm(formData: FormData, base: PriceGrid): GridForm {
     if (!formData.has(key)) continue;
     const cents = eurosToCents(text(formData, key));
     if (cents === null) {
-      fields[key] = "Enter an amount in euros, e.g. 2000 or 2000.50.";
+      fields[key] = t("pricing.form.euros");
       continue;
     }
     raw[key] = cents;
@@ -92,7 +97,7 @@ export function readGridForm(formData: FormData, base: PriceGrid): GridForm {
     if (!formData.has(key)) continue;
     const value = text(formData, key);
     if (!/^\d+$/.test(value)) {
-      fields[key] = "Enter a whole number.";
+      fields[key] = t("pricing.form.wholeNumber");
       continue;
     }
     raw[key] = Number(value);
@@ -101,7 +106,7 @@ export function readGridForm(formData: FormData, base: PriceGrid): GridForm {
   if (formData.has("noPhotoCents")) {
     const discountEnteredPositive = eurosToCents(text(formData, "noPhotoCents"));
     if (discountEnteredPositive === null || discountEnteredPositive < 0) {
-      fields.noPhotoCents = "Enter the discount as a positive amount.";
+      fields.noPhotoCents = t("pricing.form.positiveDiscount");
     } else {
       raw.noPhotoCents = -discountEnteredPositive;
     }

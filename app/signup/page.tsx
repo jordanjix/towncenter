@@ -5,15 +5,19 @@ import { Gate } from "@/components/gate/Gate";
 import { redirect } from "next/navigation";
 
 import { signupState, getUser } from "@/lib/accounts";
+import { getT } from "@/lib/i18n/server";
 
 import { SignUp } from "./SignUpForm";
 
 import styles from "@/components/gate/gate.module.css";
 
-export const metadata: Metadata = {
-  title: "Create an account — Towncenter",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: t("signup.metaTitle"),
+    robots: { index: false, follow: false },
+  };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +26,7 @@ export default async function SignUpPage() {
   if (await getUser()) redirect("/");
 
   const state = await signupState();
+  const t = await getT();
 
   // Closed, the page still exists and says why. A 404 would be quieter and
   // worse: whoever was given the address would hunt a broken link. This is
@@ -29,11 +34,11 @@ export default async function SignUpPage() {
   if (!state.open) {
     return (
       <Gate
-        title="Accounts are closed"
-        subtitle="This instance is not taking new accounts right now."
+        title={t("signup.closed.title")}
+        subtitle={t("signup.closed.subtitle")}
         toggle={
           <Link href="/login" className={styles.link}>
-            Back to sign in
+            {t("signup.closed.back")}
           </Link>
         }
       >
@@ -44,18 +49,18 @@ export default async function SignUpPage() {
 
   return (
     <Gate
-      title={state.isFirstAccount ? "Claim this instance" : "Create your account"}
+      title={state.isFirstAccount ? t("signup.claim.title") : t("signup.create.title")}
       subtitle={
         state.isFirstAccount
-          ? "You are the first here. This account will own the territory."
-          : "One account, one territory. Nothing is shared between them."
+          ? t("signup.claim.subtitle")
+          : t("signup.create.subtitle")
       }
       toggle={
         state.isFirstAccount ? null : (
           <>
-            Already have an account?{" "}
+            {t("signup.haveAccount")}{" "}
             <Link href="/login" className={styles.link}>
-              Sign in
+              {t("signup.signIn")}
             </Link>
           </>
         )

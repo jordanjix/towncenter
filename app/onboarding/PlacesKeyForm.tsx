@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { Button } from "@/components/ui";
+import { useT } from "@/lib/i18n/client";
 import { INITIAL_PLACES_KEY_STATE } from "./state";
 import {
   testPlacesKeyAction,
@@ -18,6 +19,7 @@ export type PlacesKeyFormProps = {
 // two useActionState hooks: one for testing (no side effects), one for saving
 // (redirects on success). Each button's formAction is its own dispatch.
 export function PlacesKeyForm({ defaultValue }: PlacesKeyFormProps) {
+  const t = useT();
   const [key, setKey] = useState(defaultValue ?? "");
 
   const [testState, testDispatch, testPending] = useActionState(
@@ -37,7 +39,7 @@ export function PlacesKeyForm({ defaultValue }: PlacesKeyFormProps) {
   return (
     <form className={styles.keyForm}>
       <label className={styles.keyLabel} htmlFor="places-key">
-        Google Places API key
+        {t("onboarding.key.label")}
       </label>
       <input
         id="places-key"
@@ -75,7 +77,7 @@ export function PlacesKeyForm({ defaultValue }: PlacesKeyFormProps) {
           formAction={testDispatch}
           disabled={testPending || savePending || key.length < 20}
         >
-          {testPending ? "Checking…" : "Check the key"}
+          {testPending ? t("gate.signin.checking") : t("onboarding.key.check")}
         </Button>
         <Button
           type="submit"
@@ -83,7 +85,7 @@ export function PlacesKeyForm({ defaultValue }: PlacesKeyFormProps) {
           formAction={saveDispatch}
           disabled={savePending || testPending || key.length < 20}
         >
-          {savePending ? "Saving…" : "Save and continue"}
+          {savePending ? t("onboarding.key.saving") : t("onboarding.key.save")}
         </Button>
       </div>
     </form>

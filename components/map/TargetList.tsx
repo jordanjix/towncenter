@@ -7,8 +7,9 @@
 import type { TargetRow } from "@/app/queries";
 import { Badge, percent, resistanceBand } from "@/components/ui";
 import { formatEuros } from "@/lib/format";
+import { useT } from "@/lib/i18n/client";
 
-import { STATE_LABEL } from "./text";
+import { stateLabel } from "./text";
 
 export type TargetListProps = {
   targets: readonly TargetRow[];
@@ -42,6 +43,7 @@ function Row({
   /** False inside the "Off-grid" section, whose heading already says it. */
   showOffGrid?: boolean;
 }) {
+  const t = useT();
   const offGrid = target.score.price.kind === "off-grid";
   const band = resistanceBand(target.resistancePercent);
   const address = [target.address, target.city].filter(Boolean).join(" · ");
@@ -60,7 +62,7 @@ function Row({
           <span className="t-title-3 target-row__name">{target.name}</span>
           {offGrid ? (
             showOffGrid ? (
-              <span className="t-micro target-row__off-grid">Off-grid</span>
+              <span className="t-micro target-row__off-grid">{t("list.offgrid.chip")}</span>
             ) : null
           ) : (
             <span className="t-body-s tnum target-row__loot">
@@ -73,7 +75,7 @@ function Row({
           <span className="t-body-s target-row__meta">
             {[
               address,
-              target.state === "spotted" ? null : STATE_LABEL[target.state],
+              target.state === "spotted" ? null : stateLabel(t)[target.state],
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -83,7 +85,7 @@ function Row({
             data-band={band.key}
           >
             {percent(target.resistancePercent)}
-            <span className="sr-only"> resistance, {band.label}</span>
+            <span className="sr-only"> {t("list.sr.resistance", { band: band.label })}</span>
           </span>
         </span>
       </button>
@@ -100,6 +102,7 @@ export function TargetList({
   truncated = false,
   className,
 }: TargetListProps) {
+  const t = useT();
   // Off-grid targets are pulled OUT of the sort and shown first: they have an
   // expectancy of zero by construction, so sorting would bury them at the
   // bottom, and they are often the best deals in the file.
@@ -112,7 +115,7 @@ export function TargetList({
     return (
       <div className={className}>
         <p className="t-body tone-2">
-          No business in this frame. Draw a sector and run the survey.
+          {t("list.empty")}
         </p>
       </div>
     );
@@ -122,10 +125,9 @@ export function TargetList({
     <div className={className}>
       {offGrid.length > 0 ? (
         <section className="target-list__off-grid">
-          <Badge asChild><h3>Off-grid · to price by hand</h3></Badge>
+          <Badge asChild><h3>{t("list.offgrid.title")}</h3></Badge>
           <p className="t-body-s tone-2">
-            The work goes beyond the default offer, so no amount is announced. These
-            are not zero-euro targets — they are the ones worth going to see.
+            {t("list.offgrid.body")}
           </p>
           <ul className="target-list__ul">
             {offGrid.map((target) => (
@@ -154,16 +156,15 @@ export function TargetList({
 
       {rest > 0 ? (
         <p className="t-body-s tone-3 target-list__rest tnum">
-          {rest} more business{rest > 1 ? "es" : ""} in this frame, not shown here.
-          Tighten the view.
+          {t(rest > 1 ? "list.rest.many" : "list.rest.one", { n: rest })}
         </p>
       ) : null}
 
       {truncated ? (
         <p className="t-body-s target-list__cut tnum">
-          The read was cut at its ceiling
-          {typeof total === "number" ? `: ${total} businesses in the frame` : ""}. The
-          spoils shown are therefore a floor.
+          {typeof total === "number"
+            ? t("list.cutTotal", { n: total })
+            : t("list.cut")}
         </p>
       ) : null}
     </div>

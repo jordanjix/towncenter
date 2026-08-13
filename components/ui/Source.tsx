@@ -1,9 +1,21 @@
 // where a displayed figure comes from. the keys are ASCII: they drive
 // `data-source` and the legend order, and are never translated.
 
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n/messages";
+
 import { cx } from "./style";
 
 export type SourceKey = "sirene" | "google" | "audit" | "log" | "computed";
+
+// `SOURCES` stays English data (`prompt.ts` reads it); screens translate here.
+export function sourceName(t: Translate, key: SourceKey): string {
+  return t(`source.${key}.name`);
+}
+
+function sourceWhat(t: Translate, key: SourceKey): string {
+  return t(`source.${key}.what`);
+}
 
 export type SourceEntry = {
   key: SourceKey;
@@ -132,21 +144,22 @@ export type SourceProps = {
 };
 
 export function Source({ sourceKey, withName = false, className }: SourceProps) {
-  const source = SOURCES[sourceKey];
+  const t = useT();
+  const name = sourceName(t, sourceKey);
 
   return (
     <span
       className={cx("source", withName && "source--named", className)}
       data-source={sourceKey}
-      title={`${source.name} — ${source.what}`}
+      title={`${name} — ${sourceWhat(t, sourceKey)}`}
     >
       <Glyph sourceKey={sourceKey} />
       {withName ? (
-        <span className="source__name t-body-s">{source.name}</span>
+        <span className="source__name t-body-s">{name}</span>
       ) : (
         // without the visible name the glyph is mute: `title` on a `span` is
         // not reliably announced.
-        <span className="sr-only">{`Source: ${source.name}`}</span>
+        <span className="sr-only">{t("ui.source.sr", { name })}</span>
       )}
     </span>
   );
@@ -176,6 +189,7 @@ export type SourceLegendProps = {
 };
 
 export function SourceLegend({ keys, className }: SourceLegendProps) {
+  const t = useT();
   const kept = SOURCE_ORDER.filter((key) => keys.includes(key));
   if (kept.length === 0) return null;
 
@@ -183,6 +197,7 @@ export function SourceLegend({ keys, className }: SourceLegendProps) {
     <ul className={cx("source-legend", className)}>
       {kept.map((key) => {
         const source = SOURCES[key];
+        const name = sourceName(t, key);
         return (
           <li key={key} className="source-legend__row">
             <Source key={key} sourceKey={key} />
@@ -190,13 +205,13 @@ export function SourceLegend({ keys, className }: SourceLegendProps) {
               <span className="t-body-s source-legend__name">
                 {source.href ? (
                   <a href={source.href} target="_blank" rel="noreferrer noopener">
-                    {source.name}
+                    {name}
                   </a>
                 ) : (
-                  source.name
+                  name
                 )}
               </span>
-              <span className="t-body-s source-legend__what">{source.what}</span>
+              <span className="t-body-s source-legend__what">{sourceWhat(t, key)}</span>
             </span>
           </li>
         );

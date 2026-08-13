@@ -4,6 +4,8 @@ import Script from "next/script";
 
 import { Toaster } from "@/components/ui/sonner";
 import { THEME_SCRIPT, DEFAULT_THEME } from "@/components/ui/theme";
+import { I18nProvider } from "@/lib/i18n/client";
+import { getLocale, getT } from "@/lib/i18n/server";
 
 import "./globals.css";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -46,30 +48,33 @@ function socialOrigin(): URL {
   return new URL(process.env.APP_URL ?? "http://localhost:3000");
 }
 
-const DESCRIPTION = "Neighbourhood shop prospecting, street by street.";
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  const description = t("meta.description");
 
-export const metadata: Metadata = {
-  metadataBase: socialOrigin(),
-  title: "Towncenter",
-  description: DESCRIPTION,
-  // No `images` key on either block: `app/opengraph-image.png` is a file
-  // convention, and Next fills both from it. Naming an image here would
-  // OVERRIDE the file and pin a path that the build hashes.
-  openGraph: {
-    type: "website",
-    siteName: "Towncenter",
+  return {
+    metadataBase: socialOrigin(),
     title: "Towncenter",
-    description: DESCRIPTION,
-  },
-  // `resolveTwitter()` returns null when this block is absent — the card type
-  // is never inferred from the presence of an Open Graph image. Without it X
-  // falls back to a small square thumbnail and the 1200x630 image is wasted.
-  twitter: {
-    card: "summary_large_image",
-    title: "Towncenter",
-    description: DESCRIPTION,
-  },
-};
+    description,
+    // No `images` key on either block: `app/opengraph-image.png` is a file
+    // convention, and Next fills both from it. Naming an image here would
+    // OVERRIDE the file and pin a path that the build hashes.
+    openGraph: {
+      type: "website",
+      siteName: "Towncenter",
+      title: "Towncenter",
+      description,
+    },
+    // `resolveTwitter()` returns null when this block is absent — the card type
+    // is never inferred from the presence of an Open Graph image. Without it X
+    // falls back to a small square thumbnail and the 1200x630 image is wasted.
+    twitter: {
+      card: "summary_large_image",
+      title: "Towncenter",
+      description,
+    },
+  };
+}
 
 export const viewport: Viewport = {
   // the tool is used in the street, on a phone: zoom stays possible, so
@@ -83,15 +88,17 @@ export const viewport: Viewport = {
   themeColor: "#edeff2",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const locale = await getLocale();
+
   return (
     // `data-theme` is an ASCII key: `dark` / `light`. Light is the default.
     <html
-      lang="en"
+      lang={locale}
       data-theme={DEFAULT_THEME}
       className={`${mono.variable} ${serif.variable}`}
       // The script below fixes `data-theme` before paint, so the server-rendered
@@ -119,7 +126,7 @@ export default function RootLayout({
           <i className="rigging__l1" />
           <i className="rigging__l2" />
         </div>
-        {children}
+        <I18nProvider locale={locale}>{children}</I18nProvider>
         <Toaster position="bottom-right" />
       </body>
     </html>

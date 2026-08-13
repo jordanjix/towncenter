@@ -15,6 +15,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui";
+import { useT } from "@/lib/i18n/client";
 
 import { signUpAction } from "../login/actions";
 import { INITIAL_SIGNUP_STATE } from "../login/state";
@@ -27,6 +28,7 @@ export type SignUpProps = {
 };
 
 export function SignUp({ isFirstAccount }: SignUpProps) {
+  const t = useT();
   const [state, action, inProgress] = useActionState(
     signUpAction,
     INITIAL_SIGNUP_STATE,
@@ -49,15 +51,12 @@ export function SignUp({ isFirstAccount }: SignUpProps) {
       ) : null}
 
       {isFirstAccount ? (
-        <p className={styles.notice}>
-          This instance has no account yet. The one you create now becomes its
-          owner, and everything already surveyed here belongs to it.
-        </p>
+        <p className={styles.notice}>{t("signup.firstNotice")}</p>
       ) : null}
 
       <div className={styles.fields}>
         <Field>
-          <FieldLabel htmlFor="signup-email">Email</FieldLabel>
+          <FieldLabel htmlFor="signup-email">{t("gate.signin.email")}</FieldLabel>
           <Input
             id="signup-email"
             name="email"
@@ -75,7 +74,7 @@ export function SignUp({ isFirstAccount }: SignUpProps) {
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="signup-name">Name</FieldLabel>
+          <FieldLabel htmlFor="signup-name">{t("signup.name")}</FieldLabel>
           <Input
             id="signup-name"
             name="displayName"
@@ -87,13 +86,13 @@ export function SignUp({ isFirstAccount }: SignUpProps) {
             aria-describedby={`signup-name-hint${state.fields.displayName ? " signup-name-error" : ""}`}
           />
           <FieldDescription id="signup-name-hint">
-            Optional. It only shows in the account menu.
+            {t("signup.nameHint")}
           </FieldDescription>
           <FieldError id="signup-name-error">{state.fields.displayName}</FieldError>
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="signup-password">Password</FieldLabel>
+          <FieldLabel htmlFor="signup-password">{t("gate.signin.password")}</FieldLabel>
           <InputGroup>
             <InputGroupInput
               id="signup-password"
@@ -109,7 +108,7 @@ export function SignUp({ isFirstAccount }: SignUpProps) {
             <InputGroupButton
               onClick={() => setVisible((was) => !was)}
               aria-pressed={visible}
-              aria-label={visible ? "Hide password" : "Show password"}
+              aria-label={visible ? t("gate.signin.hidePassword") : t("gate.signin.showPassword")}
             >
               {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
             </InputGroupButton>
@@ -122,7 +121,11 @@ export function SignUp({ isFirstAccount }: SignUpProps) {
 
       <div style={{ marginTop: "24px" }}>
         <Button type="submit" variant="primary" fullWidth disabled={inProgress}>
-          {inProgress ? "Creating…" : isFirstAccount ? "Claim this instance" : "Create account"}
+          {inProgress
+            ? t("signup.creating")
+            : isFirstAccount
+              ? t("signup.claim.title")
+              : t("signup.createSubmit")}
         </Button>
       </div>
     </form>

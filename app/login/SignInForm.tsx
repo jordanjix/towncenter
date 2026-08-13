@@ -14,6 +14,8 @@ import {
   InputGroupInput,
 } from "@/components/ui";
 
+import { useT } from "@/lib/i18n/client";
+
 import { signInAction } from "./actions";
 import { INITIAL_SIGNIN_STATE } from "./state";
 
@@ -26,6 +28,7 @@ export function SignIn() {
   );
   const next = useSearchParams().get("next") ?? "";
   const [visible, setVisible] = useState(false);
+  const t = useT();
 
   return (
     // suppressHydrationWarning: password managers tag the form itself
@@ -39,7 +42,7 @@ export function SignIn() {
 
       <div className={styles.fields}>
         <Field>
-          <FieldLabel htmlFor="signin-email">Email</FieldLabel>
+          <FieldLabel htmlFor="signin-email">{t("gate.signin.email")}</FieldLabel>
           <Input
             id="signin-email"
             name="email"
@@ -55,7 +58,7 @@ export function SignIn() {
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="signin-password">Password</FieldLabel>
+          <FieldLabel htmlFor="signin-password">{t("gate.signin.password")}</FieldLabel>
           <InputGroup>
             <InputGroupInput
               id="signin-password"
@@ -69,7 +72,11 @@ export function SignIn() {
             <InputGroupButton
               onClick={() => setVisible((was) => !was)}
               aria-pressed={visible}
-              aria-label={visible ? "Hide password" : "Show password"}
+              aria-label={
+                visible
+                  ? t("gate.signin.hidePassword")
+                  : t("gate.signin.showPassword")
+              }
             >
               {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
             </InputGroupButton>
@@ -82,7 +89,7 @@ export function SignIn() {
 
       <div style={{ marginTop: "24px" }}>
         <Button type="submit" variant="primary" fullWidth disabled={inProgress}>
-          {inProgress ? "Checking…" : "Enter the field"}
+          {inProgress ? t("gate.signin.checking") : t("gate.signin.submit")}
         </Button>
       </div>
     </form>

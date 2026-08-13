@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { useT } from "@/lib/i18n/client";
+
 import { Button } from "./button";
 import { Loot } from "./Loot";
 import { percent } from "./percent";
@@ -53,6 +55,7 @@ export function Stamp({
   durationMs = 1400,
   onClose,
 }: StampProps) {
+  const t = useT();
   const [mounted, setMounted] = useState(false);
   const [_reducedMotion, setReducedMotion] = useState(true);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -116,7 +119,9 @@ export function Stamp({
         className="stamp__card"
         onClick={(event) => event.stopPropagation()}
       >
-        <p className="t-label stamp__kind">{capture ? "Taken" : "Withdrawn"}</p>
+        <p className="t-label stamp__kind">
+          {capture ? t("ui.stamp.taken") : t("ui.stamp.withdrawn")}
+        </p>
 
         <p className="t-title-1 stamp__business">{business}</p>
 
@@ -129,7 +134,8 @@ export function Stamp({
           />
         ) : (
           <p className="t-body tone-2">
-            Spoils out of play{reason ? ` · ${reason}` : ""}
+            {t("ui.stamp.outOfPlay")}
+            {reason ? ` · ${reason}` : ""}
           </p>
         )}
 
@@ -137,7 +143,10 @@ export function Stamp({
           <p className="t-body-s stamp__sector tnum">
             {capture
               ? `${sector.name} ${sector.holdBefore} → ${percent(sector.holdAfter)}`
-              : `${sector.name} unchanged, ${percent(sector.holdAfter)}`}
+              : t("ui.stamp.unchanged", {
+                  sector: sector.name,
+                  value: percent(sector.holdAfter),
+                })}
           </p>
         ) : null}
 
@@ -148,7 +157,7 @@ export function Stamp({
           className="stamp__close"
           onClick={onClose}
         >
-          Close
+          {t("ui.stamp.close")}
         </Button>
       </div>
     </div>

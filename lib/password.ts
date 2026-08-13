@@ -7,6 +7,8 @@ import "server-only";
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
+import type { Translate } from "@/lib/i18n/messages";
+
 const scryptAsync = promisify(scrypt) as (
   password: string | Buffer,
   salt: string | Buffer,
@@ -59,25 +61,26 @@ export type PasswordRefusal =
 export function checkPasswordShape(
   password: string,
   email: string,
+  t: Translate,
 ): PasswordRefusal | null {
   if (password.length < PASSWORD_MIN) {
     return {
       key: "short",
-      message: `At least ${PASSWORD_MIN} characters — length is what protects you, not symbols.`,
+      message: t("lib.password.short", { n: PASSWORD_MIN }),
     };
   }
 
   if (password.length > PASSWORD_MAX) {
     return {
       key: "long",
-      message: `${PASSWORD_MAX} characters at most.`,
+      message: t("lib.password.long", { n: PASSWORD_MAX }),
     };
   }
 
   if (TOO_COMMON.has(password.toLowerCase())) {
     return {
       key: "known",
-      message: "This one is in every leaked-password list. Pick another.",
+      message: t("lib.password.known"),
     };
   }
 
@@ -85,7 +88,7 @@ export function checkPasswordShape(
   if (local.length >= 4 && password.toLowerCase().includes(local)) {
     return {
       key: "email",
-      message: "It contains your email address. Anyone guessing would start there.",
+      message: t("lib.password.email"),
     };
   }
 
