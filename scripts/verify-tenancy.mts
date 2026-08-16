@@ -14,6 +14,7 @@
 import { eq, sql } from "drizzle-orm";
 
 import {
+  getBillingFacts,
   getOnboardingFacts,
   getBankedTotalCents,
   getPriceGrid,
@@ -27,23 +28,27 @@ import {
   listZones,
 } from "@/app/queries";
 import type { Account } from "@/lib/accounts";
-import { createAccount, verifyCredentials } from "@/lib/accounts";
+import { createAccount, signupState, verifyCredentials } from "@/lib/accounts";
 import {
   accountSettings,
   db,
   events,
+  passwordResetTokens,
   priceGrids,
+  subscriptions,
   targets,
   users,
   zones,
 } from "@/lib/db";
 import { DEFAULT_PRICE_GRID } from "@/lib/priceGrid";
+import { getAccountPlacesKey, savePlacesKey } from "@/lib/settings";
 import type { Bbox, PriceGrid } from "@/lib/types";
 
 // The bench opens signups for itself: it signs one account up at the end, and on
 // a database that already holds accounts signups are closed exactly as in
 // production. Set in this process only; it touches neither the repo nor the hosting.
 process.env.ALLOW_SIGNUPS = "true";
+process.env.AUTH_SECRET ??= "towncenter-bench-secret-at-least-32-characters";
 
 let failures = 0;
 let checks = 0;
@@ -381,16 +386,27 @@ async function main() {
   // Account settings: one row per account, and a missing row is the normal state.
 
   {
-    await db
-      .insert(accountSettings)
-      .values({ ownerId: bob.id, googlePlacesKey: "AIzaSyB-bob-secret" })
-      .onConflictDoUpdate({
-        target: accountSettings.ownerId,
-        set: { googlePlacesKey: "AIzaSyB-bob-secret" },
-      });
+    const placesKey = "AIzaSyB-bob-secret";
+    await savePlacesKey(bob.id, placesKey);
+
+    const [storedSetting] = await db
+      .select({ key: accountSettings.googlePlacesKey })
+      .from(accountSettings)
+      .where(eq(accountSettings.ownerId, bob.id))
+      .limit(1);
 
     const bobFacts = await getOnboardingFacts(bob);
     const aliceFacts = await getOnboardingFacts(alice);
+
+    check(
+      "an account key is encrypted at rest",
+      Boolean(storedSetting?.key) && storedSetting?.key !== placesKey,
+      storedSetting?.key?.startsWith("enc:v1.") ? "sealed" : "not sealed",
+    );
+    check(
+      "the encrypted account key decrypts for server use",
+      (await getAccountPlacesKey(bob.id)) === placesKey,
+    );
 
     check(
       "the key saved by an account is the one it reads back",
@@ -404,7 +420,58 @@ async function main() {
     );
   }
 
+  // Subscriptions: one row per account, read only through getBillingFacts.
+
+  {
+    // The key gates the read; a bench value turns it on WITHOUT any Mollie
+    // call — getBillingFacts only touches the database.
+    const savedKey = process.env.MOLLIE_API_KEY;
+    process.env.MOLLIE_API_KEY = "test_bench";
+
+    const periodStart = new Date(Date.now() - 24 * 3600 * 1000);
+    const periodEnd = new Date(Date.now() + 27 * 24 * 3600 * 1000);
+    await db
+      .insert(subscriptions)
+      .values({
+        ownerId: bob.id,
+        mollieCustomerId: "cst_bench_bob",
+        mollieSubscriptionId: "sub_bench_bob",
+        status: "active",
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+      })
+      .onConflictDoUpdate({
+        target: subscriptions.ownerId,
+        set: { status: "active" },
+      });
+
+    const bobBilling = await getBillingFacts(bob);
+    const aliceBilling = await getBillingFacts(alice);
+
+    check(
+      "the subscription saved by an account is the one it reads back",
+      bobBilling.status === "active" && bobBilling.current,
+      `bob status ${bobBilling.status}`,
+    );
+    check(
+      "an account with no subscription does NOT pick up another's",
+      aliceBilling.status === "none" && !aliceBilling.current,
+      `alice status ${aliceBilling.status}`,
+    );
+
+    if (savedKey === undefined) delete process.env.MOLLIE_API_KEY;
+    else process.env.MOLLIE_API_KEY = savedKey;
+  }
+
   // The cascade: deleting an account takes its territory with it.
+
+  // A pending reset token must not survive its account either: an orphaned hash
+  // would let a deleted account's email finish a reset onto a recycled id.
+  await db.insert(passwordResetTokens).values({
+    userId: bob.id,
+    tokenHash: "bench-hash-bob",
+    expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+  });
 
   await db.delete(users).where(eq(users.id, bob.id));
 
@@ -420,12 +487,22 @@ async function main() {
     .select({ total: sql<number>`count(*)` })
     .from(zones)
     .where(eq(zones.ownerId, bob.id));
+  const [remainingSubscriptions] = await db
+    .select({ total: sql<number>`count(*)` })
+    .from(subscriptions)
+    .where(eq(subscriptions.ownerId, bob.id));
+  const [remainingResetTokens] = await db
+    .select({ total: sql<number>`count(*)` })
+    .from(passwordResetTokens)
+    .where(eq(passwordResetTokens.userId, bob.id));
 
   check(
-    "deleting an account takes targets, sectors and events",
+    "deleting an account takes targets, sectors, events, subscription and reset tokens",
     Number(remainingTargets?.total) === 0 &&
       Number(remainingEvents?.total) === 0 &&
-      Number(remainingSectors?.total) === 0,
+      Number(remainingSectors?.total) === 0 &&
+      Number(remainingSubscriptions?.total) === 0 &&
+      Number(remainingResetTokens?.total) === 0,
     "Postgres cascade, no pragma",
   );
 
@@ -466,6 +543,21 @@ async function main() {
     !again.ok && again.field === "email",
     again.ok ? "a second account was created" : again.message,
   );
+
+  const savedAllowSignups = process.env.ALLOW_SIGNUPS;
+  const savedSaas = process.env.NEXT_PUBLIC_SAAS;
+  process.env.ALLOW_SIGNUPS = "";
+  process.env.NEXT_PUBLIC_SAAS = "true";
+  const saasSignup = await signupState();
+  check(
+    "SaaS mode keeps signup open without the self-hosted override",
+    saasSignup.open && !saasSignup.isFirstAccount,
+    saasSignup.reason || "open",
+  );
+  if (savedAllowSignups === undefined) delete process.env.ALLOW_SIGNUPS;
+  else process.env.ALLOW_SIGNUPS = savedAllowSignups;
+  if (savedSaas === undefined) delete process.env.NEXT_PUBLIC_SAAS;
+  else process.env.NEXT_PUBLIC_SAAS = savedSaas;
 
   // Cleanup
 

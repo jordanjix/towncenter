@@ -19,6 +19,7 @@ import {
 
 import {
   EVENT_KINDS,
+  SUBSCRIPTION_STATUSES,
   TARGET_STATES,
   TARGET_STATE_RANK,
   USER_ROLES,
@@ -28,6 +29,7 @@ import {
   type EventKind,
   type PriceGrid,
   type SiteAuditFacts,
+  type SubscriptionStatus,
   type TargetState,
   type UserRole,
   type ZoneStatus,
@@ -38,11 +40,13 @@ import {
 
 export {
   EVENT_KINDS,
+  SUBSCRIPTION_STATUSES,
   TARGET_STATES,
   TARGET_STATE_RANK,
   USER_ROLES,
   ZONE_STATUSES,
   type EventKind,
+  type SubscriptionStatus,
   type TargetState,
   type UserRole,
   type ZoneStatus,
@@ -76,6 +80,13 @@ export const users = pgTable(
 
     /** Set once the account has been through `/onboarding`; null means still owed the setup. */
     onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
+
+    // Sessions signed before this instant are dead. Set on password reset and
+    // checked in `getUser()` — never in `proxy.ts`, which has no database and
+    // only proves the cookie's signature.
+    sessionsInvalidatedAt: timestamp("sessions_invalidated_at", {
+      withTimezone: true,
+    }),
   },
   (table) => [
     /** The only guard against two simultaneous signups on the same address. */
@@ -298,6 +309,76 @@ export const priceGrids = pgTable("price_grids", {
     .defaultNow(),
 });
 
+// One row per account, like `price_grids`: a missing row means "never went near
+// billing". Only written by /billing actions and the Mollie webhook, and only
+// meaningful when MOLLIE_API_KEY is set — self-hosted instances never read it.
+export const subscriptions = pgTable("subscriptions", {
+  ownerId: text("owner_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  mollieCustomerId: text("mollie_customer_id"),
+  mollieSubscriptionId: text("mollie_subscription_id"),
+
+  planId: text("plan_id").notNull().default("pro"),
+  status: text("status", { enum: SUBSCRIPTION_STATUSES })
+    .notNull()
+    .default("pending"),
+
+  // The paid month. Quota windows start here while the subscription is active;
+  // past `currentPeriodEnd` the account falls back to the unpaid ceiling.
+  currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+
+  // The card-backed trial. Set when the €0 mandate payment is confirmed;
+  // non-null means the account's only trial is consumed. The reminder flag
+  // keeps the D-3 email idempotent across `scripts/trial-reminder.mts` runs.
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  trialReminderSentAt: timestamp("trial_reminder_sent_at", {
+    withTimezone: true,
+  }),
+
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Single-use password-reset tokens. Only the SHA-256 of the token is stored: a
+// database dump must not let anyone finish a reset. Rows are deleted on use and
+// expired ones are purged opportunistically on each new request — no cron here.
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** SHA-256 of the raw token, base64url. The raw token only exists in the email. */
+    tokenHash: text("token_hash").notNull(),
+
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("password_reset_tokens_hash_key").on(table.tokenHash),
+    /** The hourly request cap counts on (user_id, created_at). */
+    index("password_reset_tokens_user_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+  ],
+);
+
 // Like `price_grids`: one row per account, a missing row plays on the environment's key.
 export const accountSettings = pgTable("account_settings", {
   ownerId: text("owner_id")
@@ -323,3 +404,6 @@ export type PriceGridRow = typeof priceGrids.$inferSelect;
 export type NewPriceGridRow = typeof priceGrids.$inferInsert;
 export type LedgerEvent = typeof events.$inferSelect;
 export type NewLedgerEvent = typeof events.$inferInsert;
+export type SubscriptionRow = typeof subscriptions.$inferSelect;
+export type NewSubscriptionRow = typeof subscriptions.$inferInsert;
+export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;

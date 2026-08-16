@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import type { Route } from "next";
 
 import { requireUser } from "@/lib/accounts";
+import { PRO_PLAN, TRIAL_DAYS } from "@/lib/billing/plans";
+import { MAX_ZONE_AREA_KM2 } from "@/lib/limits";
 import { getOnboardingFacts, type OnboardingFacts } from "@/app/queries";
 import { Button, Badge, Card, CardHeader, CardTitle } from "@/components/ui";
 import { WorldMap } from "@/components/gate/WorldMap";
@@ -24,11 +26,11 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-const STEPS = ["key", "grid", "sector"] as const;
-type StepKey = (typeof STEPS)[number];
+const SELF_HOSTED_STEPS = ["key", "grid", "sector"] as const;
+const SAAS_STEPS = ["grid", "upgrade", "sector"] as const;
 
-function firstIncomplete(facts: OnboardingFacts): StepKey {
-  if (facts.placesKeySource === null) return "key";
+function firstIncomplete(facts: OnboardingFacts): string {
+  if (!facts.isSaaS && facts.placesKeySource === null) return "key";
   if (!facts.hasCustomGrid) return "grid";
   if (facts.sectorCount === 0) return "sector";
   return "sector";
@@ -42,12 +44,13 @@ function first(value: string | string[] | undefined): string | null {
 export default async function OnboardingPage(props: PageProps<"/onboarding">) {
   const owner = await requireUser();
   const facts = await getOnboardingFacts(owner);
+  const steps = facts.isSaaS ? SAAS_STEPS : SELF_HOSTED_STEPS;
 
   const params = await props.searchParams;
   const requested = first(params.step);
-  const step: StepKey =
-    requested && (STEPS as readonly string[]).includes(requested)
-      ? (requested as StepKey)
+  const step =
+    requested && (steps as readonly string[]).includes(requested)
+      ? requested
       : firstIncomplete(facts);
 
   return (
@@ -68,8 +71,9 @@ export default async function OnboardingPage(props: PageProps<"/onboarding">) {
           <div className={styles.center}>
             <h1 className={styles.title}>Set up your territory</h1>
             <p className={styles.subtitle}>
-              Three things to do before the map becomes useful. Each one is
-              backed by a measured fact — skip any step and come back to it.
+              {facts.isSaaS
+                ? "Two things to do before the map becomes useful, and a plan to pick. Each step is backed by a measured fact — skip any and come back to it."
+                : "Three things to do before the map becomes useful. Each one is backed by a measured fact — skip any step and come back to it."}
             </p>
 
             <StepRail facts={facts} current={step} />
@@ -79,6 +83,8 @@ export default async function OnboardingPage(props: PageProps<"/onboarding">) {
                 <KeyStep facts={facts} />
               ) : step === "grid" ? (
                 <GridStep facts={facts} />
+              ) : step === "upgrade" ? (
+                <UpgradeStep />
               ) : (
                 <SectorStep facts={facts} />
               )}
@@ -101,20 +107,25 @@ export default async function OnboardingPage(props: PageProps<"/onboarding">) {
 }
 
 type StepMeta = {
-  key: StepKey;
+  key: string;
   label: string;
   done: boolean;
 };
 
 function stepsFor(facts: OnboardingFacts): StepMeta[] {
-  return [
-    { key: "key", label: "Connect Google Places", done: facts.placesKeySource !== null },
-    { key: "grid", label: "Review your price grid", done: facts.hasCustomGrid },
-    { key: "sector", label: "Survey your first sector", done: facts.sectorCount > 0 },
-  ];
+  const items: StepMeta[] = [];
+  if (!facts.isSaaS) {
+    items.push({ key: "key", label: "Connect Google Places", done: facts.placesKeySource !== null });
+  }
+  items.push({ key: "grid", label: "Review your price grid", done: facts.hasCustomGrid });
+  if (facts.isSaaS) {
+    items.push({ key: "upgrade", label: "Choose a plan", done: false });
+  }
+  items.push({ key: "sector", label: "Survey your first sector", done: facts.sectorCount > 0 });
+  return items;
 }
 
-function StepRail({ facts, current }: { facts: OnboardingFacts; current: StepKey }) {
+function StepRail({ facts, current }: { facts: OnboardingFacts; current: string }) {
   const steps = stepsFor(facts);
   return (
     <ol className={styles.rail}>
@@ -238,6 +249,45 @@ function GridStep({ facts }: { facts: OnboardingFacts }) {
         </Link>
         <Link href="/onboarding?step=sector" className={styles.stepLink}>
           {facts.hasCustomGrid ? "Continue →" : "Keep the default grid →"}
+        </Link>
+      </div>
+    </>
+  );
+}
+
+function UpgradeStep() {
+  const price = PRO_PLAN.priceCents / 100;
+  return (
+    <>
+      <Badge asChild><h2>Plan</h2></Badge>
+      <p className="t-body">
+        Towncenter is a {TRIAL_DAYS}-day free trial, then &euro;{price}/month —
+        one plan, no tiers. A card is required to start the trial, but nothing
+        is charged until it ends, and cancelling before then costs nothing.
+      </p>
+      <Card className={styles.upgradeCard}>
+        <div className={styles.upgradePlan}>
+          <span className={styles.upgradePlanName}>{PRO_PLAN.name}</span>
+          <span className={styles.upgradePrice}>&euro;{price}<span className={styles.upgradePeriod}>/month</span></span>
+        </div>
+        <ul className={styles.upgradeLimits}>
+          <li>{PRO_PLAN.limits.harvestedTargets.toLocaleString("fr-FR")} businesses harvested</li>
+          <li>{PRO_PLAN.limits.enrichments} Google Places enrichments</li>
+          <li>{PRO_PLAN.limits.siteAudits} site audits</li>
+          <li>{PRO_PLAN.limits.cumulativeAreaKm2} km&sup2; total surface</li>
+          <li>{MAX_ZONE_AREA_KM2} km&sup2; per zone</li>
+        </ul>
+      </Card>
+      <p className="t-body-s tone-2">
+        Billing is handled by Mollie. Cancel any time — your data is yours to
+        export.
+      </p>
+      <div className={styles.stepActions}>
+        <a className={styles.upgradeCta} href="/billing">
+          Start the free trial
+        </a>
+        <Link href="/onboarding?step=sector" className={styles.stepLink}>
+          I&rsquo;ll decide later →
         </Link>
       </div>
     </>

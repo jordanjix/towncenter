@@ -59,6 +59,7 @@ export async function getUser(): Promise<Account | null> {
       displayName: users.displayName,
       role: users.role,
       passwordHash: users.passwordHash,
+      sessionsInvalidatedAt: users.sessionsInvalidatedAt,
     })
     .from(users)
     .where(eq(users.id, session.sub))
@@ -67,6 +68,16 @@ export async function getUser(): Promise<Account | null> {
   if (!row) return null;
   // a row without a hash cannot sign in; same guard as in `verifyPassword`.
   if (row.passwordHash === "") return null;
+
+  // a password reset kills every session signed before it. `iat` is whole
+  // seconds, so a session created within the invalidation second survives —
+  // acceptable, the reset flow issues no session of its own.
+  if (
+    row.sessionsInvalidatedAt &&
+    session.iat < Math.floor(row.sessionsInvalidatedAt.getTime() / 1000)
+  ) {
+    return null;
+  }
 
   return toAccount(row);
 }
@@ -95,6 +106,7 @@ export async function isFreshInstance(): Promise<boolean> {
 }
 
 function signupsAllowedByEnv(): boolean {
+  if (process.env.NEXT_PUBLIC_SAAS === "true") return true;
   const raw = process.env.ALLOW_SIGNUPS?.trim().toLowerCase() ?? "";
   return raw === "1" || raw === "true" || raw === "yes";
 }

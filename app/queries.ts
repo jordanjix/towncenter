@@ -19,6 +19,13 @@ import "server-only";
 import { and, desc, eq, gte, inArray, lte, ne, sql, type SQL } from "drizzle-orm";
 
 import type { Account } from "@/lib/accounts";
+import { getCumulativeAreaKm2 as readCumulativeAreaKm2 } from "@/lib/billing/area";
+import { mollieEnabled, mollieTestMode } from "@/lib/billing/mollie";
+import { getQuotaUsage } from "@/lib/billing/quotas";
+import {
+  getBillingState,
+  type BillingStateKind,
+} from "@/lib/billing/subscriptions";
 import {
   db,
   events,
@@ -33,6 +40,7 @@ import { areaKm2, distanceMeters, normalizeBbox, streetKey } from "@/lib/geo";
 import {
   CLUSTER_RADIUS_METERS,
   FRANCHISE_MIN_ESTABLISHMENTS,
+  MAX_CUMULATIVE_AREA_KM2,
   MAX_PROXIMITY_ANCHORS,
   MAX_TARGETS_FOR_STATS,
   MAX_TARGETS_IN_VIEW,
@@ -57,6 +65,7 @@ import {
   type ProximityFact,
   type ScoringFacts,
   type SiteAuditFacts,
+  type SubscriptionStatus,
   type TargetState,
   type ZoneStatus,
 } from "@/lib/types";
@@ -469,6 +478,7 @@ export type OnboardingFacts = {
   placesKeyMask: string | null;
   hasCustomGrid: boolean;
   sectorCount: number;
+  isSaaS: boolean;
 };
 
 export async function getOnboardingFacts(
@@ -492,6 +502,7 @@ export async function getOnboardingFacts(
     placesKeyMask: key ? maskKey(key) : null,
     hasCustomGrid,
     sectorCount,
+    isSaaS: process.env.NEXT_PUBLIC_SAAS === "true",
   };
 }
 
@@ -1112,6 +1123,90 @@ export async function listZones(owner: Account, limit = 20): Promise<ZoneRow[]> 
   }
 
   return out;
+}
+
+/**
+ * Sums the zones opened in the current quota window. Gated behind
+ * MOLLIE_API_KEY: self-hosted never enforces the cumulative ceiling, so the
+ * value is only fetched when billing is active. A current subscription counts
+ * from its paid period; an unpaid account counts everything it ever opened.
+ */
+export async function getCumulativeAreaKm2(owner: Account): Promise<{
+  km2: number;
+  maxKm2: number;
+}> {
+  const billing = await getBillingState(owner.id);
+  const periodStart = billing.periodStart;
+
+  const km2 = await readCumulativeAreaKm2(owner.id, periodStart);
+
+  return { km2, maxKm2: MAX_CUMULATIVE_AREA_KM2 };
+}
+
+export type BillingFacts = {
+  enabled: boolean;
+  testMode: boolean;
+  /** The lifecycle stage; drives everything the billing page shows. */
+  state: BillingStateKind;
+  /** "none" when the account never went near billing. */
+  status: SubscriptionStatus | "none";
+  /** Paid through now — `canceled` stays current until the period runs out. */
+  current: boolean;
+  /** Non-null once a mandate opened a trial; the account gets exactly one. */
+  trialEndsAtIso: string | null;
+  periodEndIso: string | null;
+  usedKm2: number;
+  maxKm2: number;
+  /** The three counted quotas beside the surface one. */
+  usage: {
+    harvest: { used: number; limit: number };
+    enrich: { used: number; limit: number };
+    audit: { used: number; limit: number };
+  };
+};
+
+export async function getBillingFacts(owner: Account): Promise<BillingFacts> {
+  if (!mollieEnabled()) {
+    return {
+      enabled: false,
+      testMode: false,
+      state: "self-hosted",
+      status: "none",
+      current: false,
+      trialEndsAtIso: null,
+      periodEndIso: null,
+      usedKm2: 0,
+      maxKm2: MAX_CUMULATIVE_AREA_KM2,
+      usage: {
+        harvest: { used: 0, limit: 0 },
+        enrich: { used: 0, limit: 0 },
+        audit: { used: 0, limit: 0 },
+      },
+    };
+  }
+
+  const [billing, quotas] = await Promise.all([
+    getBillingState(owner.id),
+    getQuotaUsage(owner.id),
+  ]);
+  const row = billing.row;
+
+  return {
+    enabled: true,
+    testMode: mollieTestMode(),
+    state: billing.state,
+    status: row?.status ?? "none",
+    current: billing.state === "trial" || billing.state === "active",
+    trialEndsAtIso: row?.trialEndsAt?.toISOString() ?? null,
+    periodEndIso: row?.currentPeriodEnd?.toISOString() ?? null,
+    usedKm2: quotas.area.used,
+    maxKm2: quotas.area.limit,
+    usage: {
+      harvest: { used: quotas.harvest.used, limit: quotas.harvest.limit },
+      enrich: { used: quotas.enrich.used, limit: quotas.enrich.limit },
+      audit: { used: quotas.audit.used, limit: quotas.audit.limit },
+    },
+  };
 }
 
 // Pages calling these reads must set `export const dynamic = "force-dynamic"`,
