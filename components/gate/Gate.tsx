@@ -14,9 +14,16 @@ import Link from "next/link";
 import { WorldMap } from "./WorldMap";
 import townCentre from "./towncenter.png";
 
-import { getT } from "@/lib/i18n/server";
+import { setLocaleAction } from "@/app/localeActions";
+import { getLocale, getT } from "@/lib/i18n/server";
+import type { Locale } from "@/lib/i18n/locale";
 
 import styles from "./gate.module.css";
+
+const LOCALE_LABELS: Record<Locale, string> = {
+  en: "English",
+  fr: "Français",
+};
 
 export type GateProps = {
   /** The heading. Visible text. */
@@ -31,6 +38,8 @@ export type GateProps = {
 
 export async function Gate({ title, subtitle, children, toggle }: GateProps) {
   const t = await getT();
+  const locale = await getLocale();
+  const other: Locale = locale === "fr" ? "en" : "fr";
 
   return (
     <main className={styles.frame}>
@@ -50,6 +59,12 @@ export async function Gate({ title, subtitle, children, toggle }: GateProps) {
 
           <div className={styles.footerRule}>
             <span>{t("gate.tagline")}</span>
+            <form action={setLocaleAction}>
+              <input type="hidden" name="locale" value={other} />
+              <button type="submit" className={styles.lang} lang={other}>
+                {LOCALE_LABELS[other]}
+              </button>
+            </form>
           </div>
         </div>
 

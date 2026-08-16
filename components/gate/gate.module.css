@@ -129,6 +129,21 @@
   text-underline-offset: 3px;
 }
 
+.lang {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.lang:hover {
+  color: var(--text-2);
+}
+
 /* The alert. The system has two states only — success and failure — so there is
    no third tone here. */
 
