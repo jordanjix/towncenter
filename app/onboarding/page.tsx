@@ -3,13 +3,13 @@ import type { Metadata } from "next";
 import type { Route } from "next";
 
 import { requireUser } from "@/lib/accounts";
+import { PRO_PLAN, TRIAL_DAYS } from "@/lib/billing/plans";
+import { MAX_ZONE_AREA_KM2 } from "@/lib/limits";
 import { getOnboardingFacts, type OnboardingFacts } from "@/app/queries";
 import { Button, Badge, Card, CardHeader, CardTitle } from "@/components/ui";
 import { WorldMap } from "@/components/gate/WorldMap";
 import townCentre from "@/components/gate/towncenter.png";
 import Image from "next/image";
-import { getT } from "@/lib/i18n/server";
-import type { Translate } from "@/lib/i18n/messages";
 
 import { PlacesKeyForm } from "./PlacesKeyForm";
 import {
@@ -19,21 +19,18 @@ import {
 
 import styles from "./onboarding.module.css";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getT();
-  return {
-    title: t("onboarding.metaTitle"),
-    robots: { index: false, follow: false },
-  };
-}
+export const metadata: Metadata = {
+  title: "Setup — Towncenter",
+  robots: { index: false, follow: false },
+};
 
 export const dynamic = "force-dynamic";
 
-const STEPS = ["key", "grid", "sector"] as const;
-type StepKey = (typeof STEPS)[number];
+const SELF_HOSTED_STEPS = ["key", "grid", "sector"] as const;
+const SAAS_STEPS = ["grid", "upgrade", "sector"] as const;
 
-function firstIncomplete(facts: OnboardingFacts): StepKey {
-  if (facts.placesKeySource === null) return "key";
+function firstIncomplete(facts: OnboardingFacts): string {
+  if (!facts.isSaaS && facts.placesKeySource === null) return "key";
   if (!facts.hasCustomGrid) return "grid";
   if (facts.sectorCount === 0) return "sector";
   return "sector";
@@ -47,13 +44,13 @@ function first(value: string | string[] | undefined): string | null {
 export default async function OnboardingPage(props: PageProps<"/onboarding">) {
   const owner = await requireUser();
   const facts = await getOnboardingFacts(owner);
-  const t = await getT();
+  const steps = facts.isSaaS ? SAAS_STEPS : SELF_HOSTED_STEPS;
 
   const params = await props.searchParams;
   const requested = first(params.step);
-  const step: StepKey =
-    requested && (STEPS as readonly string[]).includes(requested)
-      ? (requested as StepKey)
+  const step =
+    requested && (steps as readonly string[]).includes(requested)
+      ? requested
       : firstIncomplete(facts);
 
   return (
@@ -72,8 +69,12 @@ export default async function OnboardingPage(props: PageProps<"/onboarding">) {
           </Link>
 
           <div className={styles.center}>
-            <h1 className={styles.title}>{t("onboarding.title")}</h1>
-            <p className={styles.subtitle}>{t("onboarding.subtitle")}</p>
+            <h1 className={styles.title}>Set up your territory</h1>
+            <p className={styles.subtitle}>
+              {facts.isSaaS
+                ? "Two things to do before the map becomes useful, and a plan to pick. Each step is backed by a measured fact — skip any and come back to it."
+                : "Three things to do before the map becomes useful. Each one is backed by a measured fact — skip any step and come back to it."}
+            </p>
 
             <StepRail facts={facts} current={step} />
 
@@ -82,6 +83,8 @@ export default async function OnboardingPage(props: PageProps<"/onboarding">) {
                 <KeyStep facts={facts} />
               ) : step === "grid" ? (
                 <GridStep facts={facts} />
+              ) : step === "upgrade" ? (
+                <UpgradeStep />
               ) : (
                 <SectorStep facts={facts} />
               )}
@@ -89,7 +92,7 @@ export default async function OnboardingPage(props: PageProps<"/onboarding">) {
           </div>
 
           <div className={styles.footerRule}>
-            <span>{t("gate.tagline")}</span>
+            <span>Neighbourhood prospecting, street by street.</span>
           </div>
         </div>
 
@@ -104,22 +107,26 @@ export default async function OnboardingPage(props: PageProps<"/onboarding">) {
 }
 
 type StepMeta = {
-  key: StepKey;
+  key: string;
   label: string;
   done: boolean;
 };
 
-function stepsFor(facts: OnboardingFacts, t: Translate): StepMeta[] {
-  return [
-    { key: "key", label: t("onboarding.step.key"), done: facts.placesKeySource !== null },
-    { key: "grid", label: t("onboarding.step.grid"), done: facts.hasCustomGrid },
-    { key: "sector", label: t("onboarding.step.sector"), done: facts.sectorCount > 0 },
-  ];
+function stepsFor(facts: OnboardingFacts): StepMeta[] {
+  const items: StepMeta[] = [];
+  if (!facts.isSaaS) {
+    items.push({ key: "key", label: "Connect Google Places", done: facts.placesKeySource !== null });
+  }
+  items.push({ key: "grid", label: "Review your price grid", done: facts.hasCustomGrid });
+  if (facts.isSaaS) {
+    items.push({ key: "upgrade", label: "Choose a plan", done: false });
+  }
+  items.push({ key: "sector", label: "Survey your first sector", done: facts.sectorCount > 0 });
+  return items;
 }
 
-async function StepRail({ facts, current }: { facts: OnboardingFacts; current: StepKey }) {
-  const t = await getT();
-  const steps = stepsFor(facts, t);
+function StepRail({ facts, current }: { facts: OnboardingFacts; current: string }) {
+  const steps = stepsFor(facts);
   return (
     <ol className={styles.rail}>
       {steps.map((s, i) => {
@@ -156,19 +163,17 @@ function Check() {
   );
 }
 
-async function KeyStep({ facts }: { facts: OnboardingFacts }) {
-  const t = await getT();
-
+function KeyStep({ facts }: { facts: OnboardingFacts }) {
   if (facts.placesKeySource === "env") {
     return (
       <>
         <Badge asChild><h2>Google Places</h2></Badge>
         <p className="t-body">
-          {t("onboarding.key.env")} (<code>GOOGLE_PLACES_API_KEY</code>).{" "}
-          {t("onboarding.key.envNothing")}
+          The key is provided by the server environment
+          (<code>GOOGLE_PLACES_API_KEY</code>). Nothing to do here.
         </p>
         <Link href="/onboarding?step=grid" className={styles.stepLink}>
-          {t("onboarding.continue")}
+          Continue →
         </Link>
       </>
     );
@@ -179,15 +184,15 @@ async function KeyStep({ facts }: { facts: OnboardingFacts }) {
       <>
         <Badge asChild><h2>Google Places</h2></Badge>
         <p className="t-body">
-          {t("onboarding.key.configured")} <code>{facts.placesKeyMask}</code>.
+          Your key is configured: <code>{facts.placesKeyMask}</code>.
         </p>
         <form action={removePlacesKeyAction} className={styles.removeForm}>
           <Button type="submit" variant="quiet" size="compact">
-            {t("onboarding.key.remove")}
+            Remove the key
           </Button>
         </form>
         <Link href="/onboarding?step=grid" className={styles.stepLink}>
-          {t("onboarding.continue")}
+          Continue →
         </Link>
       </>
     );
@@ -196,62 +201,118 @@ async function KeyStep({ facts }: { facts: OnboardingFacts }) {
   return (
     <>
       <Badge asChild><h2>Google Places</h2></Badge>
-      <p className="t-body">{t("onboarding.key.intro")}</p>
+      <p className="t-body">
+        Enrichment needs a Google Places API key. Without it, the map still
+        works — surveying, scoring and the ledger need no key at all — but no
+        business will ever get a website address, and the in-house site audit
+        has nothing to read.
+      </p>
       <Card>
         <CardHeader>
-          <CardTitle>{t("onboarding.key.cardTitle")}</CardTitle>
+          <CardTitle>Your key</CardTitle>
         </CardHeader>
         <PlacesKeyForm />
-        <p className="t-body-s tone-3">{t("onboarding.key.note")}</p>
+        <p className="t-body-s tone-3">
+          Stored on this instance, used server-side only. One billed request is
+          made when you click &ldquo;Check the key&rdquo;.
+        </p>
       </Card>
       <Link href="/onboarding?step=grid" className={styles.stepLink}>
-        {t("onboarding.key.skip")}
+        Skip for now →
       </Link>
     </>
   );
 }
 
-async function GridStep({ facts }: { facts: OnboardingFacts }) {
-  const t = await getT();
+function GridStep({ facts }: { facts: OnboardingFacts }) {
   return (
     <>
-      <Badge asChild><h2>{t("onboarding.grid.badge")}</h2></Badge>
-      <p className="t-body">{t("onboarding.grid.intro")}</p>
+      <Badge asChild><h2>Price grid</h2></Badge>
+      <p className="t-body">
+        Every amount on the map comes from your grid: the loot on a target, the
+        treasure of a sector. The default grid ships with the product — one
+        freelancer&rsquo;s real rates, a starting point.
+      </p>
       {facts.hasCustomGrid ? (
-        <p className="t-body-s tone-2">{t("onboarding.grid.custom")}</p>
+        <p className="t-body-s tone-2">
+          You have already saved a custom grid.
+        </p>
       ) : (
-        <p className="t-body-s tone-2">{t("onboarding.grid.default")}</p>
+        <p className="t-body-s tone-2">
+          You are on the default grid. Open the pricing screen to change it, or
+          keep the default and continue.
+        </p>
       )}
       <div className={styles.stepActions}>
         <Link href="/pricing" className={styles.stepLink}>
-          {t("onboarding.grid.open")}
+          Open the pricing screen
         </Link>
         <Link href="/onboarding?step=sector" className={styles.stepLink}>
-          {facts.hasCustomGrid ? t("onboarding.continue") : t("onboarding.grid.keep")}
+          {facts.hasCustomGrid ? "Continue →" : "Keep the default grid →"}
         </Link>
       </div>
     </>
   );
 }
 
-async function SectorStep({ facts }: { facts: OnboardingFacts }) {
-  const t = await getT();
+function UpgradeStep() {
+  const price = PRO_PLAN.priceCents / 100;
   return (
     <>
-      <Badge asChild><h2>{t("onboarding.sector.badge")}</h2></Badge>
-      <p className="t-body">{t("onboarding.sector.intro")}</p>
+      <Badge asChild><h2>Plan</h2></Badge>
+      <p className="t-body">
+        Towncenter is a {TRIAL_DAYS}-day free trial, then &euro;{price}/month —
+        one plan, no tiers. A card is required to start the trial, but nothing
+        is charged until it ends, and cancelling before then costs nothing.
+      </p>
+      <Card className={styles.upgradeCard}>
+        <div className={styles.upgradePlan}>
+          <span className={styles.upgradePlanName}>{PRO_PLAN.name}</span>
+          <span className={styles.upgradePrice}>&euro;{price}<span className={styles.upgradePeriod}>/month</span></span>
+        </div>
+        <ul className={styles.upgradeLimits}>
+          <li>{PRO_PLAN.limits.harvestedTargets.toLocaleString("fr-FR")} businesses harvested</li>
+          <li>{PRO_PLAN.limits.enrichments} Google Places enrichments</li>
+          <li>{PRO_PLAN.limits.siteAudits} site audits</li>
+          <li>{PRO_PLAN.limits.cumulativeAreaKm2} km&sup2; total surface</li>
+          <li>{MAX_ZONE_AREA_KM2} km&sup2; per zone</li>
+        </ul>
+      </Card>
+      <p className="t-body-s tone-2">
+        Billing is handled by Mollie. Cancel any time — your data is yours to
+        export.
+      </p>
+      <div className={styles.stepActions}>
+        <a className={styles.upgradeCta} href="/billing">
+          Start the free trial
+        </a>
+        <Link href="/onboarding?step=sector" className={styles.stepLink}>
+          I&rsquo;ll decide later →
+        </Link>
+      </div>
+    </>
+  );
+}
+
+function SectorStep({ facts }: { facts: OnboardingFacts }) {
+  return (
+    <>
+      <Badge asChild><h2>First sector</h2></Badge>
+      <p className="t-body">
+        Draw a sector on the map. It fills with every business actually
+        registered there — the French national company register knows them, and
+        it is free and key-less. Each one becomes a target carrying two numbers:
+        the loot and the resistance.
+      </p>
       {facts.sectorCount > 0 ? (
         <p className="t-body-s tone-2">
-          {facts.sectorCount === 1
-            ? t("onboarding.sector.surveyedOne")
-            : t("onboarding.sector.surveyedMany", { n: facts.sectorCount })}
+          You have already surveyed {facts.sectorCount} sector
+          {facts.sectorCount === 1 ? "" : "s"}.
         </p>
       ) : null}
       <form action={finishOnboardingAction}>
         <Button type="submit" variant="primary" fullWidth>
-          {facts.sectorCount > 0
-            ? t("onboarding.sector.back")
-            : t("onboarding.sector.enter")}
+          {facts.sectorCount > 0 ? "Back to the map" : "Enter the map"}
         </Button>
       </form>
     </>

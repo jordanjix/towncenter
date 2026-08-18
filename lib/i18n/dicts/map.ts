@@ -48,6 +48,12 @@ const en = {
     "{area} km²: beyond {max} km², the survey would return an incomplete sector without saying so. Cut it smaller.",
   "map.badge.area": "{area} km²",
   "map.badge.refused": "{area} km² — beyond {max} km², the survey is refused",
+  "map.badge.refusedCumulative":
+    "{area} km² — total would reach {total} km² ({max} km² limit)",
+  "map.draw.cumulative":
+    "Cumulative limit reached: you have surveyed {done} km² this month. Adding {area} km² would reach {total} km² (limit: {max} km²).",
+  "map.draw.hintQuota":
+    "Drag to draw a rectangle. {max} km² per sector, {total} km² total per month ({done} km² already surveyed).",
   "map.drawing.sr": "Drawing. Esc to cancel.",
   "map.sector.unnamed": "Unnamed sector",
 
@@ -159,6 +165,12 @@ const fr: Record<keyof typeof en, string> = {
     "{area} km² : au-delà de {max} km², la récolte renverrait un secteur incomplet sans le dire. Découpez-le plus petit.",
   "map.badge.area": "{area} km²",
   "map.badge.refused": "{area} km² — au-delà de {max} km², la récolte est refusée",
+  "map.badge.refusedCumulative":
+    "{area} km² — le total atteindrait {total} km² (limite : {max} km²)",
+  "map.draw.cumulative":
+    "Limite cumulée atteinte : vous avez récolté {done} km² ce mois-ci. Ajouter {area} km² porterait le total à {total} km² (limite : {max} km²).",
+  "map.draw.hintQuota":
+    "Faites glisser pour tracer un rectangle. {max} km² par secteur, {total} km² au total par mois ({done} km² déjà récoltés).",
   "map.drawing.sr": "Tracé en cours. Échap pour annuler.",
   "map.sector.unnamed": "Secteur sans nom",
 

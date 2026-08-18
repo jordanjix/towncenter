@@ -44,6 +44,7 @@ import {
   type NewTarget,
   type Target,
 } from "@/lib/db";
+import { checkQuota } from "@/lib/billing/quotas";
 import { formatEuros } from "@/lib/format";
 import { normalizeBbox } from "@/lib/geo";
 import { ENRICH_BATCH_SIZE } from "@/lib/limits";
@@ -329,6 +330,13 @@ export async function harvestZoneAction(
     page: field(formData, "page"),
   };
 
+  // first line of defence: the none/expired billing states and the monthly
+  // harvested-targets ceiling. The area ceiling lives in openZone.
+  const harvestQuota = await checkQuota("harvest", owner.id);
+  if (!harvestQuota.allowed) {
+    return fail(previous, harvestQuota.message ?? "Quota reached.", {}, values);
+  }
+
   const pageRaw = field(formData, "page");
   const parsed = surveySchema.safeParse({
     frame: json(formData, "frame"),
@@ -506,6 +514,10 @@ async function enrichOne(
   record: Target,
   googleKey: string | null,
   t: Translate,
+  // false when the audit quota is spent: Google facts still land, the audit
+  // is skipped, and the selection below excludes audit-only rows so the
+  // client loop cannot spin on them.
+  auditAllowed = true,
 ): Promise<EnrichOutcome> {
   const googleOn = googleKey !== null;
   const patch: Partial<NewTarget> = {};
@@ -599,12 +611,12 @@ async function enrichOne(
   const auditPending =
     record.auditedAt === null || (siteUrl !== null && siteUrl !== record.websiteUrl);
 
-  if (auditPending && siteUrl !== null) {
+  if (auditAllowed && auditPending && siteUrl !== null) {
     attempted = true;
     const facts = await auditSite(siteUrl);
     patch.siteAudit = facts;
     patch.auditedAt = new Date();
-  } else if (auditPending && absenceEstablished) {
+  } else if (auditAllowed && auditPending && absenceEstablished) {
     // an OBSERVATION, not a missing attempt: Google knows the place and it has
     // no site
     attempted = true;
@@ -629,7 +641,7 @@ async function enrichOne(
 /** The live states: the only ones worth paying Google for. */
 const LIVE_STATES: readonly TargetState[] = ["spotted", "studied", "engaged"];
 
-function pendingCondition(googleOn: boolean): SQL {
+function pendingCondition(googleOn: boolean, auditOn = true): SQL {
   const cutoff = new Date(Date.now() - GOOGLE_FRESHNESS_DAYS * 86_400_000);
 
   // An audit to run on an address we already hold, served by Google OR typed by
@@ -647,6 +659,10 @@ function pendingCondition(googleOn: boolean): SQL {
     isNull(targets.googleFetchedAt),
     lt(targets.googleFetchedAt, cutoff),
   ) as SQL;
+
+  // audit quota spent: audit-only rows leave the pending set, so the batch
+  // loop and its "remaining" count agree and the client never spins.
+  if (!auditOn) return googlePending;
 
   return or(googlePending, auditPending) as SQL;
 }
@@ -680,6 +696,14 @@ export async function enrichZoneAction(
     return fail(previous, t("actions.enrich.noKey"), {}, values);
   }
 
+  const enrichQuota = await checkQuota("enrich", owner.id);
+  if (!enrichQuota.allowed) {
+    return fail(previous, enrichQuota.message ?? "Quota reached.", {}, values);
+  }
+  // audits ride enrichment: when their quota is out, enrichment carries on
+  // and the audit is simply skipped (see pendingCondition).
+  const auditAllowed = (await checkQuota("audit", owner.id)).allowed;
+
   const bbox = parsed.data.frame;
   const googleOn = true;
 
@@ -687,7 +711,7 @@ export async function enrichZoneAction(
   const purged = await purgeStaleGoogleFacts();
 
   const scope = and(inBbox(owner.id, bbox), inArray(targets.state, [...LIVE_STATES])) as SQL;
-  const pending = and(scope, pendingCondition(googleOn)) as SQL;
+  const pending = and(scope, pendingCondition(googleOn, auditAllowed)) as SQL;
 
   const [candidates, impossibleRows] = await Promise.all([
     db.select().from(targets).where(pending).limit(ENRICH_BATCH_SIZE),
@@ -743,7 +767,7 @@ export async function enrichZoneAction(
       break;
     }
 
-    const outcome = await enrichOne(record, googleKey, t);
+    const outcome = await enrichOne(record, googleKey, t, auditAllowed);
     if (outcome.status === "enriched") enriched += 1;
     if (outcome.status === "failed") {
       failure = { message: outcome.message, fatal: outcome.fatal };
@@ -860,8 +884,14 @@ export async function enrichTargetAction(
     return fail(previous, t("actions.enrich.noKey"), {}, values);
   }
 
+  const enrichQuota = await checkQuota("enrich", owner.id);
+  if (!enrichQuota.allowed) {
+    return fail(previous, enrichQuota.message ?? "Quota reached.", {}, values);
+  }
+  const auditAllowed = (await checkQuota("audit", owner.id)).allowed;
+
   const purged = await purgeStaleGoogleFacts();
-  const outcome = await enrichOne(record, googleKey, t);
+  const outcome = await enrichOne(record, googleKey, t, auditAllowed);
 
   // successes are logged too, not just failures: without this line the hosting
   // logs show nothing at all and there is no way to tell whether the action ran

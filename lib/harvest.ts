@@ -8,11 +8,15 @@ import "server-only";
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 
+import { getCumulativeAreaKm2 } from "@/lib/billing/area";
+import { MESSAGE_EXPIRED, MESSAGE_START_TRIAL } from "@/lib/billing/quotas";
+import { getBillingState } from "@/lib/billing/subscriptions";
 import { db, events, targets, zones, type NewTarget, type Zone } from "@/lib/db";
 import { areaKm2, normalizeBbox, pointInPolygon } from "@/lib/geo";
 import { getT } from "@/lib/i18n/server";
 import {
   HARVEST_PAGES_PER_CALL,
+  MAX_CUMULATIVE_AREA_KM2,
   MAX_TARGETS_PER_HARVEST,
   MAX_ZONE_AREA_KM2,
   UPSERT_CHUNK,
@@ -189,7 +193,7 @@ async function logSpotting(
 }
 
 export type ZoneRefusal = {
-  reason: "surface" | "naf";
+  reason: "surface" | "naf" | "billing";
   message: string;
 };
 
@@ -229,22 +233,55 @@ export async function openZone(
     request.nafCodes && request.nafCodes.length > 0
       ? [...request.nafCodes]
       : [...SIRENE_DEFAULT_NAF_CODES];
+  const billing = process.env.MOLLIE_API_KEY
+    ? await getBillingState(request.ownerId)
+    : null;
 
-  const [created] = await db
-    .insert(zones)
-    .values({
-      ownerId: request.ownerId,
-      label: request.label ?? null,
-      bbox,
-      nafCodes,
-    })
-    .returning({ id: zones.id });
-
-  if (!created) {
-    return { reason: "surface", message: t("lib.harvest.sectorNotOpened") };
+  // no mandate yet, or a lapsed one: nothing costly opens, data stays readable.
+  if (billing?.state === "none") {
+    return { reason: "billing", message: MESSAGE_START_TRIAL };
+  }
+  if (billing?.state === "expired") {
+    return { reason: "billing", message: MESSAGE_EXPIRED };
   }
 
-  return { zoneId: created.id, bbox, nafCodes };
+  return db.transaction(async (tx) => {
+    if (billing) {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${request.ownerId}))`,
+      );
+
+      const cumulative = await getCumulativeAreaKm2(
+        request.ownerId,
+        billing.periodStart,
+        tx,
+      );
+
+      if (cumulative + area > MAX_CUMULATIVE_AREA_KM2) {
+        const total = cumulative + area;
+        return {
+          reason: "surface" as const,
+          message: `Cumulative limit reached: ${cumulative.toFixed(1)} km² already surveyed this period. Adding ${area.toFixed(1)} km² would reach ${total.toFixed(1)} km² (limit: ${MAX_CUMULATIVE_AREA_KM2} km²). Manage your plan on the Billing screen.`,
+        };
+      }
+    }
+
+    const [created] = await tx
+      .insert(zones)
+      .values({
+        ownerId: request.ownerId,
+        label: request.label ?? null,
+        bbox,
+        nafCodes,
+      })
+      .returning({ id: zones.id });
+
+    if (!created) {
+      return { reason: "surface" as const, message: t("lib.harvest.sectorNotOpened") };
+    }
+
+    return { zoneId: created.id, bbox, nafCodes };
+  });
 }
 
 // a `failed` sector is resumable, a `done` one is not.

@@ -66,6 +66,7 @@ import {
   CLUSTER_RADIUS_PX,
   CLUSTER_ZOOM_MAX,
   MAP_LAYERS,
+  MAX_CUMULATIVE_AREA_KM2,
   MAX_ZONE_AREA_KM2,
   PRICE_ZOOM_MIN,
   PULSE_GHOST_MS,
@@ -76,6 +77,8 @@ import {
 import type { Bbox, LatLng } from "@/lib/types";
 
 import { ringOf, frameContains, frameToText } from "./frame";
+import { TargetToolbar } from "./TargetToolbar";
+import { writeView, type TargetView } from "./view";
 import {
   vertexSquare,
   stripBasemap,
@@ -721,6 +724,8 @@ export type TerritoryMapProps = {
   account: Account;
   frame: Bbox;
   frameText: string;
+  /** How the businesses are ordered and which states are shown. Lives in the URL. */
+  view: TargetView;
   targets: readonly TargetRow[];
   total: number;
   truncated: boolean;
@@ -732,6 +737,8 @@ export type TerritoryMapProps = {
   /** Full-site price plus a year of hosting: the reference a dot's size is measured against. */
   standardDealCents: number;
   detail: TargetDetail | null;
+  /** Cumulative area already surveyed this month. null = self-hosted, no limit. */
+  cumulativeAreaKm2: { km2: number; maxKm2: number } | null;
   /** The queryable activities, with their French NAF labels. */
   naf: readonly NafOption[];
   defaultNaf: readonly string[];
@@ -743,6 +750,7 @@ export function TerritoryMap({
   account,
   frame,
   frameText,
+  view,
   targets,
   total,
   truncated,
@@ -753,6 +761,7 @@ export function TerritoryMap({
   stats,
   standardDealCents,
   detail,
+  cumulativeAreaKm2,
   naf,
   defaultNaf,
   fichesParPage,
@@ -819,14 +828,23 @@ export function TerritoryMap({
 
   // The screen's state lives in the URL.
   const goTo = useCallback(
-    (nextFrame: string, targetId: string | null) => {
+    (nextFrame: string, targetId: string | null, nextView: TargetView = view) => {
       const params = new URLSearchParams();
       params.set("frame", nextFrame);
       if (targetId) params.set("target", targetId);
+      // carried on every navigation, or panning the map would silently reset the
+      // sort back to expected value
+      writeView(params, nextView);
       // `typedRoutes` only validates LITERAL hrefs; a built URL needs `as Route`.
       beginTransition(() => router.replace(`/?${params.toString()}` as Route, { scroll: false }));
     },
-    [router],
+    [router, view],
+  );
+
+  // The frame and the open record are kept: changing the sort is not a move.
+  const changeView = useCallback(
+    (nextView: TargetView) => goTo(frameText, selectedId, nextView),
+    [goTo, frameText, selectedId],
   );
 
   // Whether the FULL sheet is open. Selecting a business shows the floating
@@ -886,10 +904,6 @@ export function TerritoryMap({
     const node = badge.current;
     if (!node) return;
 
-    // No attribute of this node is declared in JSX. React reapplies JSX
-    // attributes on every render, and the parent renders many times a second
-    // while drawing, which made the badge flicker and then stay hidden.
-    // Visibility rides on a `data-active` the JSX never mentions.
     if (!bbox) {
       node.dataset.active = "no";
       return;
@@ -897,16 +911,28 @@ export function TerritoryMap({
 
     const area = areaKm2(bbox);
     const tooLarge = area > MAX_ZONE_AREA_KM2;
+    const overCumulative =
+      cumulativeAreaKm2 !== null && area + cumulativeAreaKm2.km2 > MAX_CUMULATIVE_AREA_KM2;
+    const refused = tooLarge || overCumulative;
     node.dataset.active = "yes";
     node.style.transform = `translate(${Math.round(x) + 16}px, ${Math.round(y) + 16}px)`;
-    node.dataset.refusal = tooLarge ? "yes" : "no";
-    node.textContent = tooLarge
-      ? tRef.current("map.badge.refused", {
-          area: formatNumber(area, 2),
-          max: MAX_ZONE_AREA_KM2,
-        })
-      : tRef.current("map.badge.area", { area: formatNumber(area, 2) });
-  }, []);
+    node.dataset.refusal = refused ? "yes" : "no";
+    if (tooLarge) {
+      node.textContent = tRef.current("map.badge.refused", {
+        area: formatNumber(area, 2),
+        max: MAX_ZONE_AREA_KM2,
+      });
+    } else if (overCumulative) {
+      const total = area + cumulativeAreaKm2.km2;
+      node.textContent = tRef.current("map.badge.refusedCumulative", {
+        area: formatNumber(area, 2),
+        total: formatNumber(total, 2),
+        max: MAX_CUMULATIVE_AREA_KM2,
+      });
+    } else {
+      node.textContent = tRef.current("map.badge.area", { area: formatNumber(area, 2) });
+    }
+  }, [cumulativeAreaKm2]);
 
   const cancelDraw = useCallback(() => {
     traceRef.current = null;
@@ -1125,6 +1151,22 @@ export function TerritoryMap({
             tRef.current("map.draw.tooLarge", {
               area: formatNumber(area, 2),
               max: MAX_ZONE_AREA_KM2,
+            }),
+          );
+          return;
+        }
+
+        if (
+          cumulativeAreaKm2 !== null &&
+          area + cumulativeAreaKm2.km2 > MAX_CUMULATIVE_AREA_KM2
+        ) {
+          const total = area + cumulativeAreaKm2.km2;
+          setDrawRefusal(
+            tRef.current("map.draw.cumulative", {
+              done: formatNumber(cumulativeAreaKm2.km2, 2),
+              area: formatNumber(area, 2),
+              total: formatNumber(total, 2),
+              max: MAX_CUMULATIVE_AREA_KM2,
             }),
           );
           return;
@@ -1600,14 +1642,21 @@ export function TerritoryMap({
             onDeleted={handleSectorDeleted}
           />
         ) : (
-          <TargetList
-            targets={targets}
-            selectedId={selectedId}
-            onSelect={select}
-            total={total}
-            truncated={truncated}
-            className="territory__list"
-          />
+          <>
+            <TargetToolbar
+              view={view}
+              onChange={changeView}
+              busy={inTransition}
+            />
+            <TargetList
+              targets={targets}
+              selectedId={selectedId}
+              onSelect={select}
+              total={total}
+              truncated={truncated}
+              className="territory__list"
+            />
+          </>
         )}
       </div>
     </aside>
@@ -1744,6 +1793,14 @@ export function TerritoryMap({
                     <Link href={"/onboarding" as Route}>{t("map.menu.setup")}</Link>
                   </DropdownMenuItem>
 
+                  {/* Only on the hosted service: self-hosted has no plan to
+                      manage, and the quota prop is its own billing switch. */}
+                  {cumulativeAreaKm2 !== null ? (
+                    <DropdownMenuItem asChild>
+                      <Link href={"/billing" as Route}>Billing</Link>
+                    </DropdownMenuItem>
+                  ) : null}
+
                   {/* The label names the DESTINATION, never the current
                       state: in a list, "Dark" alone reads as the state you
                       are already in. */}
@@ -1791,7 +1848,13 @@ export function TerritoryMap({
                  continues on the next line, turning "12 km²" into "12km²"
                  with no warning. */
               <p className="t-body-s map__hint">
-                {t("map.draw.hint", { max: MAX_ZONE_AREA_KM2 })}
+                {cumulativeAreaKm2 !== null
+                  ? t("map.draw.hintQuota", {
+                      max: MAX_ZONE_AREA_KM2,
+                      total: MAX_CUMULATIVE_AREA_KM2,
+                      done: formatNumber(cumulativeAreaKm2.km2, 1),
+                    })
+                  : t("map.draw.hint", { max: MAX_ZONE_AREA_KM2 })}
               </p>
             ) : null}
 
