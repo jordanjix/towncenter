@@ -215,10 +215,13 @@ export async function signUpAction(
   after(() =>
     sendEmail(
       account.email,
-      welcomeEmail({
-        name: account.displayName,
-        trialDays: mollieEnabled() ? TRIAL_DAYS : null,
-      }),
+      welcomeEmail(
+        {
+          name: account.displayName,
+          trialDays: mollieEnabled() ? TRIAL_DAYS : null,
+        },
+        t,
+      ),
     ),
   );
 

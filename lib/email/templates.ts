@@ -4,10 +4,14 @@
 // engine would be a dependency for seven emails.
 
 import { PRO_PLAN } from "@/lib/billing/plans";
+import { translator, type Translate } from "@/lib/i18n/messages";
 
 import type { EmailContent } from "./resend";
 
 const PRICE_LABEL = `€${PRO_PLAN.priceCents / 100}/month`;
+
+// callers that predate i18n (billing, scripts/) still get English
+const englishT = translator("en");
 
 function escapeHtml(value: string): string {
   return value
@@ -19,8 +23,8 @@ function escapeHtml(value: string): string {
 }
 
 /** "24 August 2026" — dates in emails are moments the user must act before. */
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
+function formatDate(date: Date, t: Translate): string {
+  return new Intl.DateTimeFormat(t("email.dateLocale"), {
     day: "numeric",
     month: "long",
     year: "numeric",
@@ -28,8 +32,8 @@ function formatDate(date: Date): string {
   }).format(date);
 }
 
-function greeting(name: string | null): string {
-  return name ? `Hi ${name},` : "Hi,";
+function greeting(name: string | null, t: Translate): string {
+  return name ? t("email.greeting.named", { name }) : t("email.greeting.anon");
 }
 
 function layout(title: string, bodyHtml: string): string {
@@ -53,209 +57,222 @@ function button(href: string, label: string): string {
   return `<p style="margin:24px 0;"><a href="${escapeHtml(href)}" style="display:inline-block;padding:10px 20px;background:#1c1917;color:#ffffff;border-radius:6px;font-size:15px;text-decoration:none;">${label}</a></p>`;
 }
 
-export function passwordResetEmail(input: {
-  name: string | null;
-  resetUrl: string;
-  expiresMinutes: number;
-}): EmailContent {
-  const subject = "Reset your Towncenter password";
+export function passwordResetEmail(
+  input: {
+    name: string | null;
+    resetUrl: string;
+    expiresMinutes: number;
+  },
+  t: Translate = englishT,
+): EmailContent {
+  const subject = t("email.reset.subject");
+  const asked = t("email.reset.asked");
+  const expires = t("email.reset.expires", { minutes: input.expiresMinutes });
+  const ignore = t("email.reset.ignore");
   return {
     subject,
     html: layout(
       subject,
-      paragraph(escapeHtml(greeting(input.name))) +
-        paragraph(
-          "Someone — hopefully you — asked to reset the password on this account. The link below works once and expires in " +
-            `${input.expiresMinutes} minutes.`,
-        ) +
-        button(input.resetUrl, "Choose a new password") +
-        paragraph(
-          "If you did not ask for this, ignore this email: the password stays as it is.",
-        ),
+      paragraph(escapeHtml(greeting(input.name, t))) +
+        paragraph(`${asked} ${expires}`) +
+        button(input.resetUrl, t("email.reset.button")) +
+        paragraph(ignore),
     ),
     text: [
-      greeting(input.name),
+      greeting(input.name, t),
       "",
-      "Someone — hopefully you — asked to reset the password on this account.",
-      `The link below works once and expires in ${input.expiresMinutes} minutes.`,
+      asked,
+      expires,
       "",
       input.resetUrl,
       "",
-      "If you did not ask for this, ignore this email: the password stays as it is.",
+      ignore,
     ].join("\n"),
   };
 }
 
-export function welcomeEmail(input: {
-  name: string | null;
-  /** Days of trial, or null outside the hosted SaaS. */
-  trialDays: number | null;
-}): EmailContent {
-  const subject = "Welcome to Towncenter";
+export function welcomeEmail(
+  input: {
+    name: string | null;
+    /** Days of trial, or null outside the hosted SaaS. */
+    trialDays: number | null;
+  },
+  t: Translate = englishT,
+): EmailContent {
+  const subject = t("email.welcome.subject");
+  const ready = t("email.welcome.ready");
   const trialLine = input.trialDays
-    ? `Start your ${input.trialDays}-day free trial from the Billing screen — a card is required but nothing is charged until the trial ends, and you can cancel any time before.`
-    : "Draw a zone on the map to survey your first street.";
+    ? t("email.welcome.trial", { days: input.trialDays })
+    : t("email.welcome.draw");
   return {
     subject,
     html: layout(
       subject,
-      paragraph(escapeHtml(greeting(input.name))) +
-        paragraph(
-          "Your account is ready. Towncenter maps the businesses of a territory so you can work it street by street.",
-        ) +
+      paragraph(escapeHtml(greeting(input.name, t))) +
+        paragraph(ready) +
         paragraph(escapeHtml(trialLine)),
     ),
-    text: [
-      greeting(input.name),
-      "",
-      "Your account is ready. Towncenter maps the businesses of a territory so you can work it street by street.",
-      "",
-      trialLine,
-    ].join("\n"),
+    text: [greeting(input.name, t), "", ready, "", trialLine].join("\n"),
   };
 }
 
-export function trialStartedEmail(input: {
-  name: string | null;
-  firstChargeAt: Date;
-  billingUrl: string;
-}): EmailContent {
-  const subject = "Your Towncenter trial is active";
-  const when = formatDate(input.firstChargeAt);
+export function trialStartedEmail(
+  input: {
+    name: string | null;
+    firstChargeAt: Date;
+    billingUrl: string;
+  },
+  t: Translate = englishT,
+): EmailContent {
+  const subject = t("email.trialStarted.subject");
+  const when = formatDate(input.firstChargeAt, t);
+  const started = t("email.trialStarted.started", {
+    plan: escapeHtml(PRO_PLAN.name),
+  });
   return {
     subject,
     html: layout(
       subject,
-      paragraph(escapeHtml(greeting(input.name))) +
+      paragraph(escapeHtml(greeting(input.name, t))) +
+        paragraph(started) +
         paragraph(
-          `Your 14-day trial has started with the full ${escapeHtml(PRO_PLAN.name)} limits. Nothing was charged today.`,
+          t("email.trialStarted.firstPayment", {
+            price: PRICE_LABEL,
+            date: `<strong>${when}</strong>`,
+          }),
         ) +
-        paragraph(
-          `The first payment of ${PRICE_LABEL} runs on <strong>${when}</strong>. Cancel before that date from the Billing screen and you will never be charged.`,
-        ) +
-        button(input.billingUrl, "Manage your plan"),
+        button(input.billingUrl, t("email.managePlan")),
     ),
     text: [
-      greeting(input.name),
+      greeting(input.name, t),
       "",
-      `Your 14-day trial has started with the full ${PRO_PLAN.name} limits. Nothing was charged today.`,
+      t("email.trialStarted.started", { plan: PRO_PLAN.name }),
       "",
-      `The first payment of ${PRICE_LABEL} runs on ${when}. Cancel before that date from the Billing screen and you will never be charged.`,
+      t("email.trialStarted.firstPayment", { price: PRICE_LABEL, date: when }),
       "",
       input.billingUrl,
     ].join("\n"),
   };
 }
 
-export function trialReminderEmail(input: {
-  name: string | null;
-  firstChargeAt: Date;
-  billingUrl: string;
-}): EmailContent {
-  const subject = "Your Towncenter paid period starts in 3 days";
-  const when = formatDate(input.firstChargeAt);
+export function trialReminderEmail(
+  input: {
+    name: string | null;
+    firstChargeAt: Date;
+    billingUrl: string;
+  },
+  t: Translate = englishT,
+): EmailContent {
+  const subject = t("email.trialReminder.subject");
+  const when = formatDate(input.firstChargeAt, t);
   return {
     subject,
     html: layout(
       subject,
-      paragraph(escapeHtml(greeting(input.name))) +
+      paragraph(escapeHtml(greeting(input.name, t))) +
         paragraph(
-          `Your trial ends on <strong>${when}</strong>. From that date your card is charged ${PRICE_LABEL} for the ${escapeHtml(PRO_PLAN.name)} plan.`,
+          t("email.trialReminder.ends", {
+            date: `<strong>${when}</strong>`,
+            price: PRICE_LABEL,
+            plan: escapeHtml(PRO_PLAN.name),
+          }),
         ) +
-        paragraph(
-          "To keep going, do nothing. To stop before any payment, cancel from the Billing screen.",
-        ) +
-        button(input.billingUrl, "Manage your plan"),
+        paragraph(t("email.trialReminder.keepGoing")) +
+        button(input.billingUrl, t("email.managePlan")),
     ),
     text: [
-      greeting(input.name),
+      greeting(input.name, t),
       "",
-      `Your trial ends on ${when}. From that date your card is charged ${PRICE_LABEL} for the ${PRO_PLAN.name} plan.`,
+      t("email.trialReminder.ends", {
+        date: when,
+        price: PRICE_LABEL,
+        plan: PRO_PLAN.name,
+      }),
       "",
-      "To keep going, do nothing. To stop before any payment, cancel from the Billing screen:",
+      t("email.trialReminder.keepGoingText"),
       input.billingUrl,
     ].join("\n"),
   };
 }
 
-export function subscriptionActivatedEmail(input: {
-  name: string | null;
-  periodEnd: Date | null;
-}): EmailContent {
-  const subject = `Your Towncenter ${PRO_PLAN.name} subscription is active`;
+export function subscriptionActivatedEmail(
+  input: {
+    name: string | null;
+    periodEnd: Date | null;
+  },
+  t: Translate = englishT,
+): EmailContent {
+  const subject = t("email.subActivated.subject", { plan: PRO_PLAN.name });
   const renewal = input.periodEnd
-    ? ` It renews on ${formatDate(input.periodEnd)}.`
+    ? ` ${t("email.subActivated.renews", { date: formatDate(input.periodEnd, t) })}`
     : "";
+  const body = t("email.subActivated.body", {
+    plan: PRO_PLAN.name,
+    price: PRICE_LABEL,
+    renewal,
+  });
   return {
     subject,
     html: layout(
       subject,
-      paragraph(escapeHtml(greeting(input.name))) +
-        paragraph(
-          escapeHtml(
-            `Payment received — the ${PRO_PLAN.name} plan (${PRICE_LABEL}) is active on your account.${renewal}`,
-          ),
-        ),
+      paragraph(escapeHtml(greeting(input.name, t))) + paragraph(escapeHtml(body)),
     ),
-    text: [
-      greeting(input.name),
-      "",
-      `Payment received — the ${PRO_PLAN.name} plan (${PRICE_LABEL}) is active on your account.${renewal}`,
-    ].join("\n"),
+    text: [greeting(input.name, t), "", body].join("\n"),
   };
 }
 
-export function subscriptionSuspendedEmail(input: {
-  name: string | null;
-  billingUrl: string;
-}): EmailContent {
-  const subject = "A Towncenter payment failed — subscription suspended";
+export function subscriptionSuspendedEmail(
+  input: {
+    name: string | null;
+    billingUrl: string;
+  },
+  t: Translate = englishT,
+): EmailContent {
+  const subject = t("email.subSuspended.subject");
+  const failed = t("email.subSuspended.failed");
   return {
     subject,
     html: layout(
       subject,
-      paragraph(escapeHtml(greeting(input.name))) +
-        paragraph(
-          "A renewal payment failed and your subscription is suspended. Your data is untouched, but surveying stops when the paid period runs out.",
-        ) +
-        paragraph("Subscribe again from the Billing screen to set up a new mandate.") +
-        button(input.billingUrl, "Fix my subscription"),
+      paragraph(escapeHtml(greeting(input.name, t))) +
+        paragraph(failed) +
+        paragraph(t("email.subSuspended.resub")) +
+        button(input.billingUrl, t("email.subSuspended.button")),
     ),
     text: [
-      greeting(input.name),
+      greeting(input.name, t),
       "",
-      "A renewal payment failed and your subscription is suspended. Your data is untouched, but surveying stops when the paid period runs out.",
+      failed,
       "",
-      "Subscribe again from the Billing screen to set up a new mandate:",
+      t("email.subSuspended.resubText"),
       input.billingUrl,
     ].join("\n"),
   };
 }
 
-export function subscriptionCanceledEmail(input: {
-  name: string | null;
-  accessUntil: Date | null;
-}): EmailContent {
-  const subject = "Your Towncenter subscription is canceled";
+export function subscriptionCanceledEmail(
+  input: {
+    name: string | null;
+    accessUntil: Date | null;
+  },
+  t: Translate = englishT,
+): EmailContent {
+  const subject = t("email.subCanceled.subject");
   const until = input.accessUntil
-    ? `You keep full access until ${formatDate(input.accessUntil)}; nothing more is charged.`
-    : "Nothing more is charged.";
+    ? t("email.subCanceled.untilDate", {
+        date: formatDate(input.accessUntil, t),
+      })
+    : t("email.subCanceled.untilNone");
+  const body = t("email.subCanceled.body", { until });
+  const after = t("email.subCanceled.after");
   return {
     subject,
     html: layout(
       subject,
-      paragraph(escapeHtml(greeting(input.name))) +
-        paragraph(escapeHtml(`Your subscription is canceled. ${until}`)) +
-        paragraph(
-          "Your territory stays readable afterwards — only surveying new ground stops. Resubscribe any time from the Billing screen.",
-        ),
+      paragraph(escapeHtml(greeting(input.name, t))) +
+        paragraph(escapeHtml(body)) +
+        paragraph(after),
     ),
-    text: [
-      greeting(input.name),
-      "",
-      `Your subscription is canceled. ${until}`,
-      "",
-      "Your territory stays readable afterwards — only surveying new ground stops. Resubscribe any time from the Billing screen.",
-    ].join("\n"),
+    text: [greeting(input.name, t), "", body, "", after].join("\n"),
   };
 }

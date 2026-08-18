@@ -26,8 +26,11 @@ const en = {
   "onboarding.title": "Set up your territory",
   "onboarding.subtitle":
     "Three things to do before the map becomes useful. Each one is backed by a measured fact — skip any step and come back to it.",
+  "onboarding.subtitleSaaS":
+    "Two things to do before the map becomes useful, and a plan to pick. Each step is backed by a measured fact — skip any and come back to it.",
   "onboarding.step.key": "Connect Google Places",
   "onboarding.step.grid": "Review your price grid",
+  "onboarding.step.upgrade": "Choose a plan",
   "onboarding.step.sector": "Survey your first sector",
   "onboarding.continue": "Continue →",
   "onboarding.key.env": "The key is provided by the server environment",
@@ -56,6 +59,13 @@ const en = {
     "You are on the default grid. Open the pricing screen to change it, or keep the default and continue.",
   "onboarding.grid.open": "Open the pricing screen",
   "onboarding.grid.keep": "Keep the default grid →",
+  "onboarding.upgrade.badge": "Plan",
+  "onboarding.upgrade.intro":
+    "Towncenter is a {days}-day free trial, then €{price}/month — one plan, no tiers. A card is required to start the trial, but nothing is charged until it ends, and cancelling before then costs nothing.",
+  "onboarding.upgrade.note":
+    "Billing is handled by Mollie. Cancel any time — your data is yours to export.",
+  "onboarding.upgrade.start": "Start the free trial",
+  "onboarding.upgrade.later": "I’ll decide later →",
   "onboarding.sector.badge": "First sector",
   "onboarding.sector.intro":
     "Draw a sector on the map. It fills with every business actually registered there — the French national company register knows them, and it is free and key-less. Each one becomes a target carrying two numbers: the loot and the resistance.",
@@ -93,8 +103,11 @@ const fr: Record<keyof typeof en, string> = {
   "onboarding.title": "Préparer votre territoire",
   "onboarding.subtitle":
     "Trois choses à faire avant que la carte ne devienne utile. Chacune s’appuie sur un fait mesuré — passez une étape et revenez-y plus tard.",
+  "onboarding.subtitleSaaS":
+    "Deux choses à faire avant que la carte ne devienne utile, et une formule à choisir. Chaque étape s’appuie sur un fait mesuré — passez-en une et revenez-y plus tard.",
   "onboarding.step.key": "Connecter Google Places",
   "onboarding.step.grid": "Revoir votre grille tarifaire",
+  "onboarding.step.upgrade": "Choisir une formule",
   "onboarding.step.sector": "Relever votre premier secteur",
   "onboarding.continue": "Continuer →",
   "onboarding.key.env": "La clé est fournie par l’environnement du serveur",
@@ -125,6 +138,13 @@ const fr: Record<keyof typeof en, string> = {
     "Vous êtes sur la grille par défaut. Ouvrez l’écran des tarifs pour la modifier, ou gardez-la et continuez.",
   "onboarding.grid.open": "Ouvrir l’écran des tarifs",
   "onboarding.grid.keep": "Garder la grille par défaut →",
+  "onboarding.upgrade.badge": "Formule",
+  "onboarding.upgrade.intro":
+    "Towncenter, c’est {days} jours d’essai gratuit, puis {price} €/mois — une seule formule, pas de paliers. Une carte est requise pour démarrer l’essai, mais rien n’est débité avant la fin, et résilier avant ne coûte rien.",
+  "onboarding.upgrade.note":
+    "La facturation est gérée par Mollie. Résiliez à tout moment — vos données sont à vous et restent exportables.",
+  "onboarding.upgrade.start": "Démarrer l’essai gratuit",
+  "onboarding.upgrade.later": "Je déciderai plus tard →",
   "onboarding.sector.badge": "Premier secteur",
   "onboarding.sector.intro":
     "Dessinez un secteur sur la carte. Il se remplit de tous les commerces réellement immatriculés là — le registre national des entreprises les connaît, et il est gratuit et sans clé. Chacun devient une cible portant deux nombres : le butin et la résistance.",

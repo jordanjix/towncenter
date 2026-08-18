@@ -239,10 +239,10 @@ export async function openZone(
 
   // no mandate yet, or a lapsed one: nothing costly opens, data stays readable.
   if (billing?.state === "none") {
-    return { reason: "billing", message: MESSAGE_START_TRIAL };
+    return { reason: "billing", message: t(MESSAGE_START_TRIAL) };
   }
   if (billing?.state === "expired") {
-    return { reason: "billing", message: MESSAGE_EXPIRED };
+    return { reason: "billing", message: t(MESSAGE_EXPIRED) };
   }
 
   return db.transaction(async (tx) => {
@@ -261,7 +261,12 @@ export async function openZone(
         const total = cumulative + area;
         return {
           reason: "surface" as const,
-          message: `Cumulative limit reached: ${cumulative.toFixed(1)} km² already surveyed this period. Adding ${area.toFixed(1)} km² would reach ${total.toFixed(1)} km² (limit: ${MAX_CUMULATIVE_AREA_KM2} km²). Manage your plan on the Billing screen.`,
+          message: t("billing.quota.cumulativeArea", {
+            cumulative: cumulative.toFixed(1),
+            area: area.toFixed(1),
+            total: total.toFixed(1),
+            limit: MAX_CUMULATIVE_AREA_KM2,
+          }),
         };
       }
     }

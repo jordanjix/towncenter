@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 
+import { getT } from "@/lib/i18n/server";
 import { PASSWORD_MAX } from "@/lib/password";
 import { resetPassword } from "@/lib/passwordReset";
 
@@ -19,9 +20,10 @@ export async function resetPasswordAction(
   const passwordRaw = formData.get("password");
   const password = typeof passwordRaw === "string" ? passwordRaw : "";
 
-  if (password === "") return { error: "Choose a password." };
+  const t = await getT();
+  if (password === "") return { error: t("reset.action.choose") };
   if (password.length > PASSWORD_MAX) {
-    return { error: `${PASSWORD_MAX} characters at most.` };
+    return { error: t("reset.action.tooLong", { max: PASSWORD_MAX }) };
   }
 
   const outcome = await resetPassword(token, password);

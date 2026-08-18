@@ -4,31 +4,37 @@ import type { Metadata } from "next";
 
 import { Gate } from "@/components/gate/Gate";
 import { getUser } from "@/lib/accounts";
+import { getT } from "@/lib/i18n/server";
 
 import { ForgotPassword } from "./ForgotPasswordForm";
 
 import styles from "@/components/gate/gate.module.css";
 
-export const metadata: Metadata = {
-  title: "Forgot password — Towncenter",
-  // a gate has no business in a search engine index
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: t("reset.forgot.metaTitle"),
+    // a gate has no business in a search engine index
+    robots: { index: false, follow: false },
+  };
+}
 
 export const dynamic = "force-dynamic";
 
 export default async function ForgotPasswordPage() {
   if (await getUser()) redirect("/");
 
+  const t = await getT();
+
   return (
     <Gate
-      title="Locked out?"
-      subtitle="Give the address; if an account uses it, a reset link lands there."
+      title={t("reset.forgot.title")}
+      subtitle={t("reset.forgot.subtitle")}
       toggle={
         <>
-          Remembered it?{" "}
+          {t("reset.forgot.remembered")}{" "}
           <Link href="/login" className={styles.link}>
-            Sign in
+            {t("reset.forgot.signin")}
           </Link>
         </>
       }

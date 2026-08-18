@@ -45,7 +45,7 @@ export function SignIn() {
 
       {justReset && !state.error ? (
         <p className={styles.notice} role="status">
-          Password changed. Sign in with the new one.
+          {t("reset.signin.passwordChanged")}
         </p>
       ) : null}
 
@@ -92,7 +92,7 @@ export function SignIn() {
           </InputGroup>
           <p className={styles.forgot}>
             <Link href="/forgot-password" className={styles.link}>
-              Forgot password?
+              {t("reset.signin.forgotLink")}
             </Link>
           </p>
         </Field>

@@ -5,6 +5,8 @@ import type { Route } from "next";
 import { requireUser } from "@/lib/accounts";
 import { PRO_PLAN, TRIAL_DAYS } from "@/lib/billing/plans";
 import { MAX_ZONE_AREA_KM2 } from "@/lib/limits";
+import { getT } from "@/lib/i18n/server";
+import type { Translate } from "@/lib/i18n/messages";
 import { getOnboardingFacts, type OnboardingFacts } from "@/app/queries";
 import { Button, Badge, Card, CardHeader, CardTitle } from "@/components/ui";
 import { WorldMap } from "@/components/gate/WorldMap";
@@ -19,10 +21,13 @@ import {
 
 import styles from "./onboarding.module.css";
 
-export const metadata: Metadata = {
-  title: "Setup — Towncenter",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: t("onboarding.metaTitle"),
+    robots: { index: false, follow: false },
+  };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +49,7 @@ function first(value: string | string[] | undefined): string | null {
 export default async function OnboardingPage(props: PageProps<"/onboarding">) {
   const owner = await requireUser();
   const facts = await getOnboardingFacts(owner);
+  const t = await getT();
   const steps = facts.isSaaS ? SAAS_STEPS : SELF_HOSTED_STEPS;
 
   const params = await props.searchParams;
@@ -69,11 +75,11 @@ export default async function OnboardingPage(props: PageProps<"/onboarding">) {
           </Link>
 
           <div className={styles.center}>
-            <h1 className={styles.title}>Set up your territory</h1>
+            <h1 className={styles.title}>{t("onboarding.title")}</h1>
             <p className={styles.subtitle}>
               {facts.isSaaS
-                ? "Two things to do before the map becomes useful, and a plan to pick. Each step is backed by a measured fact — skip any and come back to it."
-                : "Three things to do before the map becomes useful. Each one is backed by a measured fact — skip any step and come back to it."}
+                ? t("onboarding.subtitleSaaS")
+                : t("onboarding.subtitle")}
             </p>
 
             <StepRail facts={facts} current={step} />
@@ -92,7 +98,7 @@ export default async function OnboardingPage(props: PageProps<"/onboarding">) {
           </div>
 
           <div className={styles.footerRule}>
-            <span>Neighbourhood prospecting, street by street.</span>
+            <span>{t("gate.tagline")}</span>
           </div>
         </div>
 
@@ -112,21 +118,22 @@ type StepMeta = {
   done: boolean;
 };
 
-function stepsFor(facts: OnboardingFacts): StepMeta[] {
+function stepsFor(facts: OnboardingFacts, t: Translate): StepMeta[] {
   const items: StepMeta[] = [];
   if (!facts.isSaaS) {
-    items.push({ key: "key", label: "Connect Google Places", done: facts.placesKeySource !== null });
+    items.push({ key: "key", label: t("onboarding.step.key"), done: facts.placesKeySource !== null });
   }
-  items.push({ key: "grid", label: "Review your price grid", done: facts.hasCustomGrid });
+  items.push({ key: "grid", label: t("onboarding.step.grid"), done: facts.hasCustomGrid });
   if (facts.isSaaS) {
-    items.push({ key: "upgrade", label: "Choose a plan", done: false });
+    items.push({ key: "upgrade", label: t("onboarding.step.upgrade"), done: false });
   }
-  items.push({ key: "sector", label: "Survey your first sector", done: facts.sectorCount > 0 });
+  items.push({ key: "sector", label: t("onboarding.step.sector"), done: facts.sectorCount > 0 });
   return items;
 }
 
-function StepRail({ facts, current }: { facts: OnboardingFacts; current: string }) {
-  const steps = stepsFor(facts);
+async function StepRail({ facts, current }: { facts: OnboardingFacts; current: string }) {
+  const t = await getT();
+  const steps = stepsFor(facts, t);
   return (
     <ol className={styles.rail}>
       {steps.map((s, i) => {
@@ -163,17 +170,19 @@ function Check() {
   );
 }
 
-function KeyStep({ facts }: { facts: OnboardingFacts }) {
+async function KeyStep({ facts }: { facts: OnboardingFacts }) {
+  const t = await getT();
+
   if (facts.placesKeySource === "env") {
     return (
       <>
         <Badge asChild><h2>Google Places</h2></Badge>
         <p className="t-body">
-          The key is provided by the server environment
-          (<code>GOOGLE_PLACES_API_KEY</code>). Nothing to do here.
+          {t("onboarding.key.env")} (<code>GOOGLE_PLACES_API_KEY</code>).{" "}
+          {t("onboarding.key.envNothing")}
         </p>
         <Link href="/onboarding?step=grid" className={styles.stepLink}>
-          Continue →
+          {t("onboarding.continue")}
         </Link>
       </>
     );
@@ -184,15 +193,15 @@ function KeyStep({ facts }: { facts: OnboardingFacts }) {
       <>
         <Badge asChild><h2>Google Places</h2></Badge>
         <p className="t-body">
-          Your key is configured: <code>{facts.placesKeyMask}</code>.
+          {t("onboarding.key.configured")} <code>{facts.placesKeyMask}</code>.
         </p>
         <form action={removePlacesKeyAction} className={styles.removeForm}>
           <Button type="submit" variant="quiet" size="compact">
-            Remove the key
+            {t("onboarding.key.remove")}
           </Button>
         </form>
         <Link href="/onboarding?step=grid" className={styles.stepLink}>
-          Continue →
+          {t("onboarding.continue")}
         </Link>
       </>
     );
@@ -201,118 +210,99 @@ function KeyStep({ facts }: { facts: OnboardingFacts }) {
   return (
     <>
       <Badge asChild><h2>Google Places</h2></Badge>
-      <p className="t-body">
-        Enrichment needs a Google Places API key. Without it, the map still
-        works — surveying, scoring and the ledger need no key at all — but no
-        business will ever get a website address, and the in-house site audit
-        has nothing to read.
-      </p>
+      <p className="t-body">{t("onboarding.key.intro")}</p>
       <Card>
         <CardHeader>
-          <CardTitle>Your key</CardTitle>
+          <CardTitle>{t("onboarding.key.cardTitle")}</CardTitle>
         </CardHeader>
         <PlacesKeyForm />
-        <p className="t-body-s tone-3">
-          Stored on this instance, used server-side only. One billed request is
-          made when you click &ldquo;Check the key&rdquo;.
-        </p>
+        <p className="t-body-s tone-3">{t("onboarding.key.note")}</p>
       </Card>
       <Link href="/onboarding?step=grid" className={styles.stepLink}>
-        Skip for now →
+        {t("onboarding.key.skip")}
       </Link>
     </>
   );
 }
 
-function GridStep({ facts }: { facts: OnboardingFacts }) {
+async function GridStep({ facts }: { facts: OnboardingFacts }) {
+  const t = await getT();
   return (
     <>
-      <Badge asChild><h2>Price grid</h2></Badge>
-      <p className="t-body">
-        Every amount on the map comes from your grid: the loot on a target, the
-        treasure of a sector. The default grid ships with the product — one
-        freelancer&rsquo;s real rates, a starting point.
-      </p>
+      <Badge asChild><h2>{t("onboarding.grid.badge")}</h2></Badge>
+      <p className="t-body">{t("onboarding.grid.intro")}</p>
       {facts.hasCustomGrid ? (
-        <p className="t-body-s tone-2">
-          You have already saved a custom grid.
-        </p>
+        <p className="t-body-s tone-2">{t("onboarding.grid.custom")}</p>
       ) : (
-        <p className="t-body-s tone-2">
-          You are on the default grid. Open the pricing screen to change it, or
-          keep the default and continue.
-        </p>
+        <p className="t-body-s tone-2">{t("onboarding.grid.default")}</p>
       )}
       <div className={styles.stepActions}>
         <Link href="/pricing" className={styles.stepLink}>
-          Open the pricing screen
+          {t("onboarding.grid.open")}
         </Link>
         <Link href="/onboarding?step=sector" className={styles.stepLink}>
-          {facts.hasCustomGrid ? "Continue →" : "Keep the default grid →"}
+          {facts.hasCustomGrid
+            ? t("onboarding.continue")
+            : t("onboarding.grid.keep")}
         </Link>
       </div>
     </>
   );
 }
 
-function UpgradeStep() {
+async function UpgradeStep() {
+  const t = await getT();
   const price = PRO_PLAN.priceCents / 100;
   return (
     <>
-      <Badge asChild><h2>Plan</h2></Badge>
+      <Badge asChild><h2>{t("onboarding.upgrade.badge")}</h2></Badge>
       <p className="t-body">
-        Towncenter is a {TRIAL_DAYS}-day free trial, then &euro;{price}/month —
-        one plan, no tiers. A card is required to start the trial, but nothing
-        is charged until it ends, and cancelling before then costs nothing.
+        {t("onboarding.upgrade.intro", { days: TRIAL_DAYS, price })}
       </p>
       <Card className={styles.upgradeCard}>
         <div className={styles.upgradePlan}>
           <span className={styles.upgradePlanName}>{PRO_PLAN.name}</span>
-          <span className={styles.upgradePrice}>&euro;{price}<span className={styles.upgradePeriod}>/month</span></span>
+          <span className={styles.upgradePrice}>&euro;{price}<span className={styles.upgradePeriod}>{t("billing.perMonth")}</span></span>
         </div>
         <ul className={styles.upgradeLimits}>
-          <li>{PRO_PLAN.limits.harvestedTargets.toLocaleString("fr-FR")} businesses harvested</li>
-          <li>{PRO_PLAN.limits.enrichments} Google Places enrichments</li>
-          <li>{PRO_PLAN.limits.siteAudits} site audits</li>
-          <li>{PRO_PLAN.limits.cumulativeAreaKm2} km&sup2; total surface</li>
-          <li>{MAX_ZONE_AREA_KM2} km&sup2; per zone</li>
+          <li>{t("billing.limits.harvested", { n: PRO_PLAN.limits.harvestedTargets.toLocaleString("fr-FR") })}</li>
+          <li>{t("billing.limits.enrichments", { n: PRO_PLAN.limits.enrichments })}</li>
+          <li>{t("billing.limits.audits", { n: PRO_PLAN.limits.siteAudits })}</li>
+          <li>{t("billing.limits.totalSurface", { n: PRO_PLAN.limits.cumulativeAreaKm2 })}</li>
+          <li>{t("billing.limits.perZone", { n: MAX_ZONE_AREA_KM2 })}</li>
         </ul>
       </Card>
-      <p className="t-body-s tone-2">
-        Billing is handled by Mollie. Cancel any time — your data is yours to
-        export.
-      </p>
+      <p className="t-body-s tone-2">{t("onboarding.upgrade.note")}</p>
       <div className={styles.stepActions}>
         <a className={styles.upgradeCta} href="/billing">
-          Start the free trial
+          {t("onboarding.upgrade.start")}
         </a>
         <Link href="/onboarding?step=sector" className={styles.stepLink}>
-          I&rsquo;ll decide later →
+          {t("onboarding.upgrade.later")}
         </Link>
       </div>
     </>
   );
 }
 
-function SectorStep({ facts }: { facts: OnboardingFacts }) {
+async function SectorStep({ facts }: { facts: OnboardingFacts }) {
+  const t = await getT();
   return (
     <>
-      <Badge asChild><h2>First sector</h2></Badge>
-      <p className="t-body">
-        Draw a sector on the map. It fills with every business actually
-        registered there — the French national company register knows them, and
-        it is free and key-less. Each one becomes a target carrying two numbers:
-        the loot and the resistance.
-      </p>
+      <Badge asChild><h2>{t("onboarding.sector.badge")}</h2></Badge>
+      <p className="t-body">{t("onboarding.sector.intro")}</p>
       {facts.sectorCount > 0 ? (
         <p className="t-body-s tone-2">
-          You have already surveyed {facts.sectorCount} sector
-          {facts.sectorCount === 1 ? "" : "s"}.
+          {facts.sectorCount === 1
+            ? t("onboarding.sector.surveyedOne")
+            : t("onboarding.sector.surveyedMany", { n: facts.sectorCount })}
         </p>
       ) : null}
       <form action={finishOnboardingAction}>
         <Button type="submit" variant="primary" fullWidth>
-          {facts.sectorCount > 0 ? "Back to the map" : "Enter the map"}
+          {facts.sectorCount > 0
+            ? t("onboarding.sector.back")
+            : t("onboarding.sector.enter")}
         </Button>
       </form>
     </>

@@ -9,6 +9,8 @@ import "server-only";
 import { and, eq, gte, sql } from "drizzle-orm";
 
 import { db, targets } from "@/lib/db";
+import type { MessageKey } from "@/lib/i18n/messages";
+import { getT } from "@/lib/i18n/server";
 
 import { getCumulativeAreaKm2 } from "./area";
 import { PRO_PLAN } from "./plans";
@@ -31,19 +33,17 @@ const LIMIT_BY_KIND: Record<QuotaKind, number> = {
   area: PRO_PLAN.limits.cumulativeAreaKm2,
 };
 
-const KIND_LABEL: Record<QuotaKind, string> = {
-  harvest: "businesses harvested",
-  enrich: "Google enrichments",
-  audit: "site audits",
-  area: "km² surveyed",
+const KIND_LABEL: Record<QuotaKind, MessageKey> = {
+  harvest: "billing.quota.kind.harvest",
+  enrich: "billing.quota.kind.enrich",
+  audit: "billing.quota.kind.audit",
+  area: "billing.quota.kind.area",
 };
 
-export const MESSAGE_START_TRIAL =
-  "Start your free trial on the Billing screen to begin surveying.";
+// Dictionary keys, not strings: callers holding a `t` render them themselves.
+export const MESSAGE_START_TRIAL: MessageKey = "billing.quota.startTrial";
 
-export const MESSAGE_EXPIRED =
-  "Your trial or subscription has ended. Subscribe on the Billing screen to " +
-  "keep going — everything already surveyed stays readable.";
+export const MESSAGE_EXPIRED: MessageKey = "billing.quota.expired";
 
 async function countUsage(
   kind: QuotaKind,
@@ -88,21 +88,23 @@ export async function checkQuotaWithState(
   }
 
   if (billing.state === "none") {
+    const t = await getT();
     return {
       allowed: false,
       used: 0,
       limit: LIMIT_BY_KIND[kind],
-      message: MESSAGE_START_TRIAL,
+      message: t(MESSAGE_START_TRIAL),
     };
   }
 
   if (billing.state === "expired") {
+    const t = await getT();
     return {
       allowed: false,
       // all-time count: the billing page still shows what was surveyed.
       used: await countUsage(kind, ownerId, null),
       limit: LIMIT_BY_KIND[kind],
-      message: MESSAGE_EXPIRED,
+      message: t(MESSAGE_EXPIRED),
     };
   }
 
@@ -111,13 +113,16 @@ export async function checkQuotaWithState(
 
   if (used < limit) return { allowed: true, used, limit, message: null };
 
+  const t = await getT();
   return {
     allowed: false,
     used,
     limit,
-    message:
-      `Quota reached: ${Math.round(used)} of ${limit} ${KIND_LABEL[kind]} ` +
-      "this period. Manage your plan on the Billing screen.",
+    message: t("billing.quota.reached", {
+      used: Math.round(used),
+      limit,
+      label: t(KIND_LABEL[kind]),
+    }),
   };
 }
 

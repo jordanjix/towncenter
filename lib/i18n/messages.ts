@@ -4,22 +4,26 @@
 
 import type { Locale } from "./locale";
 import { actions } from "./dicts/actions";
+import { billing } from "./dicts/billing";
 import { gate } from "./dicts/gate";
 import { inventory } from "./dicts/inventory";
 import { libs } from "./dicts/libs";
 import { map } from "./dicts/map";
 import { pricing } from "./dicts/pricing";
+import { reset } from "./dicts/reset";
 import { sheet } from "./dicts/sheet";
 import { signup } from "./dicts/signup";
 import { ui } from "./dicts/ui";
 
 const en = {
   ...actions.en,
+  ...billing.en,
   ...gate.en,
   ...inventory.en,
   ...libs.en,
   ...map.en,
   ...pricing.en,
+  ...reset.en,
   ...sheet.en,
   ...signup.en,
   ...ui.en,
@@ -27,11 +31,13 @@ const en = {
 
 const fr: Record<MessageKey, string> = {
   ...actions.fr,
+  ...billing.fr,
   ...gate.fr,
   ...inventory.fr,
   ...libs.fr,
   ...map.fr,
   ...pricing.fr,
+  ...reset.fr,
   ...sheet.fr,
   ...signup.fr,
   ...ui.fr,

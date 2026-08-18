@@ -107,29 +107,33 @@ export async function requestPasswordReset(rawEmail: string): Promise<void> {
     appUrl(),
   ).toString();
 
+  const t = await getT();
   await sendEmail(
     user.email,
-    passwordResetEmail({
-      name: user.displayName,
-      resetUrl,
-      expiresMinutes: RESET_TOKEN_TTL_MINUTES,
-    }),
+    passwordResetEmail(
+      {
+        name: user.displayName,
+        resetUrl,
+        expiresMinutes: RESET_TOKEN_TTL_MINUTES,
+      },
+      t,
+    ),
   );
 }
 
 export type ResetOutcome = { ok: true } | { ok: false; message: string };
 
-// One generic refusal for missing, forged and expired tokens alike: telling
-// them apart tells a prober which hashes exist.
-const INVALID_LINK =
-  "This link is invalid or has expired. Request a new one from the sign-in page.";
-
 export async function resetPassword(
   rawToken: string,
   newPassword: string,
 ): Promise<ResetOutcome> {
+  const t = await getT();
+  // One generic refusal for missing, forged and expired tokens alike: telling
+  // them apart tells a prober which hashes exist.
+  const invalidLink = t("reset.invalidLink");
+
   const token = rawToken.trim();
-  if (token === "") return { ok: false, message: INVALID_LINK };
+  if (token === "") return { ok: false, message: invalidLink };
 
   const [row] = await db
     .select({
@@ -143,11 +147,10 @@ export async function resetPassword(
     .limit(1);
 
   if (!row || row.expiresAt.getTime() <= Date.now()) {
-    return { ok: false, message: INVALID_LINK };
+    return { ok: false, message: invalidLink };
   }
 
   // the same rules as signup, and THESE are authoritative
-  const t = await getT();
   const refusal = checkPasswordShape(newPassword, normalizeEmail(row.email), t);
   if (refusal) return { ok: false, message: refusal.message };
 
@@ -186,5 +189,5 @@ export async function resetPassword(
     return true;
   });
 
-  return applied ? { ok: true } : { ok: false, message: INVALID_LINK };
+  return applied ? { ok: true } : { ok: false, message: invalidLink };
 }

@@ -26,6 +26,7 @@ import {
 } from "@/lib/billing/subscriptions";
 import { sendEmail } from "@/lib/email/resend";
 import { subscriptionCanceledEmail } from "@/lib/email/templates";
+import { getT } from "@/lib/i18n/server";
 
 // One action for the trial and for every later re-subscription: the checkout
 // is always a €0.00 mandate capture, and the WEBHOOK decides what it opens —
@@ -38,6 +39,8 @@ export async function subscribeAction(formData: FormData): Promise<void> {
   }
   if (!mollieEnabled()) redirect("/billing");
 
+  const t = await getT();
+
   let checkoutUrl: string;
   try {
     const customerId = await ensureMollieCustomer(owner);
@@ -48,7 +51,7 @@ export async function subscribeAction(formData: FormData): Promise<void> {
       customerId,
       ownerId: owner.id,
       amountCents: 0,
-      description: `Towncenter ${PRO_PLAN.name} — card setup`,
+      description: t("billing.checkout.description", { plan: PRO_PLAN.name }),
       redirectUrl: new URL("/billing", appUrl).toString(),
       webhookUrl: mollieWebhookUrl(),
       methods: ZERO_AMOUNT_METHODS,

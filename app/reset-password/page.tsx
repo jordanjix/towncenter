@@ -2,16 +2,20 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 import { Gate } from "@/components/gate/Gate";
+import { getT } from "@/lib/i18n/server";
 
 import { ResetPassword } from "./ResetPasswordForm";
 
 import styles from "@/components/gate/gate.module.css";
 
-export const metadata: Metadata = {
-  title: "Reset password — Towncenter",
-  // a gate has no business in a search engine index
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: t("reset.page.metaTitle"),
+    // a gate has no business in a search engine index
+    robots: { index: false, follow: false },
+  };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -21,39 +25,37 @@ export default async function ResetPasswordPage({
   searchParams: Promise<{ token?: string }>;
 }) {
   const { token } = await searchParams;
+  const t = await getT();
 
   // No token, no form: posting without one can only fail, so say it up front.
   if (!token) {
     return (
       <Gate
-        title="This link is incomplete"
-        subtitle="A reset link carries its own key, and this one arrived without it."
+        title={t("reset.page.incomplete.title")}
+        subtitle={t("reset.page.incomplete.subtitle")}
         toggle={
           <>
-            Ask for a fresh one on{" "}
+            {t("reset.page.incomplete.ask")}{" "}
             <Link href="/forgot-password" className={styles.link}>
-              the reset page
+              {t("reset.page.incomplete.link")}
             </Link>
           </>
         }
       >
-        <p className={styles.notice}>
-          Links only live thirty minutes; the one in your most recent email is
-          the only one that counts.
-        </p>
+        <p className={styles.notice}>{t("reset.page.incomplete.notice")}</p>
       </Gate>
     );
   }
 
   return (
     <Gate
-      title="Choose a new password"
-      subtitle="The old one stops working the moment this one is saved."
+      title={t("reset.page.title")}
+      subtitle={t("reset.page.subtitle")}
       toggle={
         <>
-          Changed your mind?{" "}
+          {t("reset.page.changedMind")}{" "}
           <Link href="/login" className={styles.link}>
-            Back to sign-in
+            {t("reset.page.backToSignin")}
           </Link>
         </>
       }
